@@ -5567,6 +5567,11 @@ function ensureDrawer(){
       <button class="btn xs gh" data-act="drawer-close" aria-label="Закрыть панель">${icon('x')}</button></div><div class="dr-b" id="drawer-body"></div>`;
     document.body.appendChild(ovl); document.body.appendChild(dr);
     ovl.onclick = closeDrawer;
+    /* v3.4.2: ссылки внутри quick-preview должны закрывать drawer, но сохранять штатную навигацию href. */
+    dr.addEventListener('click', e => {
+      const a = e.target.closest('a[href]');
+      if(a) closeDrawer();
+    });
     document.addEventListener('keydown', e => { if(e.key==='Escape') closeDrawer(); });
   }
   return document.getElementById('drawer');
@@ -8339,6 +8344,8 @@ function boot(){
   DB = loadState();
   render();
   window.addEventListener('hashchange', () => { const v = parseHash().view;
+    /* v3.4.2: route change always dismisses transient right drawer/overlay. */
+    closeDrawer();
     if(v==='lead'){ UI.cardTab = UI.cardTab||'overview'; }
     render(); });
   document.addEventListener('keydown', e => {

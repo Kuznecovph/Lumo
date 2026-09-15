@@ -438,6 +438,82 @@ body.lumo-simple #topbar [data-act="new-project"]{ display:none !important; }
 body.lumo-simple .card-b .grid.g2{ max-height:170px; overflow-x:hidden; overflow-y:auto; padding:6px;
   border:1px solid var(--line); border-radius:10px; background:var(--panel-2); }
 </style>
+<style id="ui-refresh">
+:root{--bg:#f6f7f9;--panel:#fff;--panel-2:#fafbfc;--ink:#1b2534;--ink-2:#3c4a5c;--muted:#5c6b7a;--faint:#8b98a9;--line:#e8ecf1;--line-2:#f0f2f5;--acc:#2563eb;--acc-2:#eaf1fe;--acc-ink:#1d4fd7;--ok:#1f7a45;--ok-bg:#e5f4ea;--warm:#8a6100;--warm-bg:#fdf3d7;--hot:#b4232a;--hot-bg:#fbe9e9;--r-s:8px;--r-m:12px;--r-l:16px;--sh-1:0 1px 2px rgba(16,24,40,.05);--sh-2:0 2px 8px rgba(16,24,40,.07);--sh-3:0 12px 32px rgba(15,23,42,.14)}
+body{font-size:14px}
+.btn{height:34px;padding:0 14px;border-radius:10px;font-weight:600;font-size:13px;transition:background .13s,border-color .13s,box-shadow .13s,color .13s}
+.btn.sm{height:28px;padding:0 10px;border-radius:8px;font-size:12.5px}
+.btn.xs{height:24px;padding:0 8px;border-radius:7px;font-size:12px}
+.btn.pri{box-shadow:0 1px 2px rgba(37,99,235,.35)}
+.btn:focus-visible,.inp:focus-visible,select:focus-visible,textarea:focus-visible,.nav-item:focus-visible,.chk:focus-visible,.qchip:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.card{border-radius:14px;border:1px solid var(--line);box-shadow:var(--sh-1)}
+.card-h{padding:12px 16px}
+.card-b{padding:16px}
+.sidebar{width:236px}
+.nav-sec{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:14px 12px 6px}
+.nav-item{border-radius:9px;margin:1px 8px;padding:8px 10px;color:var(--ink-2);font-weight:500}
+.nav-item.active{background:var(--acc-2);color:var(--acc-ink);font-weight:600}
+.nav-item:hover{background:var(--line-2)}
+.sb-cta{width:calc(100% - 20px);margin:12px 10px 6px;display:flex;align-items:center;justify-content:center;gap:8px}
+.sb-mode{margin:10px 10px 6px;display:flex;background:var(--line-2);border-radius:9px;padding:3px;gap:3px}
+.sb-mode button{flex:1;height:26px;border:0;background:transparent;border-radius:7px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer}
+.sb-mode button.on{background:#fff;color:var(--acc-ink);box-shadow:var(--sh-1)}
+.tb-crumb,.tb-date{display:none}
+.tb-title{font-size:19px;font-weight:700;letter-spacing:-.01em}
+.tb-sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.stat-tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;position:relative;overflow:hidden}
+.stat-tile:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:3px;background:var(--faint)}
+.stat-tile.ok:before{background:var(--ok)}.stat-tile.warn:before{background:#e2a300}.stat-tile.hot:before{background:var(--hot)}.stat-tile.acc:before{background:var(--acc)}
+.stat-tile .v{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.stat-tile .l{font-size:12px;color:var(--muted);margin-top:2px}
+.next-row{display:grid;grid-template-columns:minmax(180px,1.2fr) 150px minmax(170px,1.4fr) minmax(150px,1fr) auto;gap:12px;align-items:center;padding:10px 14px;border-radius:12px}
+.next-row:hover{background:var(--line-2)}
+.next-row+.next-row{margin-top:2px}
+.next-row .co{font-weight:600}
+.next-row .sub{color:var(--muted);font-size:12px;margin-top:2px}
+.qchip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:600;color:var(--ink-2);cursor:pointer;transition:all .13s}
+.qchip.on{background:var(--acc-2);border-color:#bfd3fb;color:var(--acc-ink)}
+.qchip:hover{border-color:#cfd8e3}
+.tbl th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;background:var(--panel-2)}
+.tbl td{padding:9px 12px}
+.tbl tbody tr{transition:background .12s;cursor:pointer}
+.tbl tbody tr:hover{background:var(--panel-2)}
+.tbl tbody tr.sel{background:var(--acc-2)}
+.tbl-scroll{overflow:auto}
+.tbl td:first-child,.tbl th:first-child{position:sticky;left:0;z-index:2;background:var(--panel);box-shadow:1px 0 0 var(--line)}
+.tbl tbody tr:hover td:first-child{background:var(--panel-2)}
+.tbl tbody tr.sel td:first-child{background:var(--acc-2)}
+.co-name{font-weight:600}
+#drawer-ovl{position:fixed;inset:0;background:rgba(15,23,42,.32);opacity:0;pointer-events:none;transition:opacity .16s;z-index:60}
+#drawer-ovl.open{opacity:1;pointer-events:auto}
+#drawer{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:var(--panel);box-shadow:var(--sh-3);transform:translateX(102%);transition:transform .18s ease;z-index:61;display:flex;flex-direction:column}
+#drawer.open{transform:none}
+#drawer .dr-h{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+#drawer .dr-b{padding:16px;overflow:auto}
+.dr-row{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line-2);font-size:13px}
+.dr-row .k{width:132px;flex:none;color:var(--muted)}
+details.exp-sec{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin-top:12px}
+details.exp-sec>summary{cursor:pointer;padding:10px 14px;font-weight:600;font-size:12.5px;color:var(--muted);list-style:none;display:flex;align-items:center;gap:8px}
+details.exp-sec>summary:before{content:'▸';transition:transform .13s}
+details.exp-sec[open]>summary:before{transform:rotate(90deg)}
+details.exp-sec .exp-b{padding:4px 14px 14px}
+body.lumo-simple .expert-only{display:none!important}
+.set-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.set-tabs button{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:600;color:var(--ink-2);cursor:pointer}
+.set-tabs button.on{background:var(--acc-2);border-color:#bfd3fb;color:var(--acc-ink)}
+.destruct-zone{border:1px solid #f1c1c4;background:#fdf6f6;border-radius:12px;padding:14px}
+.badge{border-radius:6px;padding:2px 7px;font-size:11px;font-weight:700;letter-spacing:.02em}
+.chk{border-radius:8px}
+.inp,select,textarea{border-radius:10px}
+.disc-grid{display:grid;grid-template-columns:repeat(4,1fr) auto;gap:10px;align-items:end}
+@media (max-width:1280px){.disc-grid{grid-template-columns:repeat(2,1fr)}.stat-row{grid-template-columns:repeat(2,1fr)}.next-row{grid-template-columns:1.2fr 150px 1fr auto}}
+@media (max-width:1024px){.next-row{grid-template-columns:1fr auto}}
+::selection{background:#cfe0fd}
+#tb-ind,#tb-city{width:auto;min-width:150px;flex:0 0 auto}
+#drawer .inp,#drawer select{width:100%}
+</style>
 </head>
 <body>
 <div id="root" class="app">
@@ -2162,7 +2238,7 @@ const REAL_LEADS = [
 {
   name:'«ЭКО Порт»', vertical:'TRAVEL', industry:'hospitality',
   subindustry:'Загородный объект размещения с событийным направлением',
-  cityKey:'izhevsk', website:'https://ecoport18.ru', hasWebsite:true, employees:40, founded:2015, revenueEst:null, b2b:false,
+  cityKey:'votkinsk', website:'https://ecoport.ru', hasWebsite:true, employees:40, founded:2015, revenueEst:null, b2b:false,
   description:'Загородный объект: домики и территория, событийные мероприятия. Несколько лет назад для объекта снимали домики и территорию.',
   products:'Размещение в домиках, территория, события, корпоративные заезды',
   objects:'Домики, территория, берег, событийная площадка, общие зоны',
@@ -5011,14 +5087,6 @@ function normalizeState(s, keepStage){
     l.ai.docs = l.ai.docs || []; l.ai.drafts = l.ai.drafts || [];
     l.archived = !!l.archived;
     l.digitalDiscovery = l.digitalDiscovery || [];
-    /* v3.3.1 data correction: the canonical Eco Port card carried a stale/wrong domain and city.
-       Apply only to the untouched old canonical values; never overwrite a user's own correction. */
-    if(l.source==='master_canonical' && /эко\s*порт/i.test(String(l.name||'')) &&
-       /^https?:\/\/(?:www\.)?ecoport\.ru\/?$/i.test(String(l.website||''))){
-      l.website = 'https://ecoport18.ru'; l.hasWebsite = true;
-      if(l.cityKey==='votkinsk') l.cityKey = 'izhevsk';
-      l.dataCorrection = 'v3.3.1: ecoport18.ru / izhevsk';
-    }
     l.vertical = l.vertical || verticalOf(l);
     l.pricingTier = l.pricingTier || 'standard';
     l.stage = canonicalStage(l.stage);
@@ -5113,7 +5181,7 @@ function setStage(id, stage, note){
      клиента обязан быть записываемым даже при STOP. */
   if(OUTREACH_TOUCH_STAGES.includes(stage)) assertOutreachAllowed(l, 'перевод в стадию «Контакт»');
   const from = l.stage; l.stage = stage; l.stageManual = true; l.updatedAt = iso(TODAY);
-  logLead(l, 'stage', `Стадия цепочки: ${(PIPEC[from]||{short:from}).short} → ${PIPEC[stage].short}`, note||'', false);
+  logLead(l, 'stage', `Этап работы цепочки: ${(PIPEC[from]||{short:from}).short} → ${PIPEC[stage].short}`, note||'', false);
   save();
 }
 function setRelationship(id, rel, note){
@@ -5436,18 +5504,18 @@ function barRow(label, value, max, color, note){
 /* ===================== SHELL: sidebar / topbar / router ===================== */
 const NAV = [
   {sec:'Работа'},
-  {id:'dash', hash:'#/', label:'Дашборд', ico:'dash'},
-  {id:'leads', hash:'#/leads', label:'Все лиды', ico:'list', count:()=>DB.leads.length},
+  {id:'dash', hash:'#/', label:'Сегодня', ico:'dash', simple:true},
+  {id:'leads', hash:'#/leads', label:'Компании', ico:'list', simple:true, count:()=>DB.leads.length},
   {id:'priority', hash:'#/priority', label:'Кому писать сейчас', ico:'target', count:()=>countPriority()},
-  {id:'gates', hash:'#/gates', label:'Допуски (Readiness)', ico:'shield', count:()=>countGated()},
+  {id:'gates', hash:'#/gates', label:'Допуски и готовность', ico:'shield', count:()=>countGated()},
   {id:'watchlist', hash:'#/watchlist', label:'Лист наблюдения', ico:'clock', count:()=>countWatch()},
-  {id:'outreach', hash:'#/outreach', label:'Контакты и повторные касания', ico:'send', count:()=>countNeedsAction()},
+  {id:'outreach', hash:'#/outreach', label:'Контакты и касания', ico:'send', count:()=>countNeedsAction()},
   {sec:'Поиск и источники'},
-  {id:'discovery', hash:'#/discovery', label:'Поиск компаний', ico:'search', count:()=>DB.projects.length},
+  {id:'discovery', hash:'#/discovery', label:'Поиск компаний', ico:'search', simple:true, count:()=>DB.projects.length},
   {id:'sources', hash:'#/sources', label:'Источники данных', ico:'db', count:()=>Object.values(DB.adapters||{}).filter(a=>a.mode!=='demo').length},
   {sec:'Система'},
   {id:'pricing', hash:'#/pricing', label:'Цена и объём работ', ico:'chart'},
-  {id:'settings', hash:'#/settings', label:'Профиль и настройки', ico:'gear'},
+  {id:'settings', hash:'#/settings', label:'Настройки', ico:'gear', simple:true},
   {id:'help', hash:'#/help', label:'Канон MASTER', ico:'help'}
 ];
 const isClosed = l => l.outcome==='WON' || l.outcome==='LOST' || l.outcome==='STOP';
@@ -5459,23 +5527,72 @@ function countNeedsAction(){ return DB.leads.filter(l => ['FOLLOW_UP','NO_RESPON
 
 function renderSidebar(active){
   const p = DB.profile;
+  const simple = DB.ui.simpleMode !== false;
+  const items = NAV.filter(n => n.sec || !simple || n.simple);
   $('#sidebar').innerHTML = `
     <div class="brand">
       <div class="brand-logo">${lumoSymbol()}</div>
       <div><div class="brand-name">${BRAND.name}</div><div class="brand-sub">AI client scout</div></div>
     </div>
+    <button class="btn pri sb-cta" data-act="new-lead">${icon('plus')} Компания</button>
     <nav class="nav">
-      ${NAV.map(n => n.sec ? `<div class="nav-sec">${n.sec}</div>` :
+      ${items.map(n => n.sec ? (simple?'':`<div class="nav-sec">${n.sec}</div>`) :
         `<a class="nav-item ${active===n.id?'active':''}" href="${n.hash}">${icon(n.ico)}<span>${n.label}</span>${n.count?`<span class="cnt">${n.count()}</span>`:''}</a>`).join('')}
-      <div class="nav-sec">Быстрые действия</div>
-      <div class="nav-item" data-act="new-lead">${icon('plus')}<span>Добавить компанию</span></div>
-      <div class="nav-item" data-act="new-project">${icon('target')}<span>Проект поиска</span></div>
+      ${simple?'':`<div class="nav-sec">Быстрые действия</div>
+      <div class="nav-item" data-act="new-project">${icon('target')}<span>Проект поиска</span></div>`}
     </nav>
     <div class="sb-foot">
+      <div class="sb-mode" role="tablist" aria-label="Режим интерфейса">
+        <button class="${simple?'on':''}" data-act="mode-set" data-k="simple">Простой</button>
+        <button class="${simple?'':'on'}" data-act="mode-set" data-k="expert">Экспертный</button>
+      </div>
       <div class="sb-profile"><div class="avatar">${initials(p.name)}</div>
         <div style="min-width:0"><div class="n">${esc(p.name)}</div><div class="r">${esc(cityOf(p.baseCity).name)} · ${esc(p.role).slice(0,34)}</div></div></div>
-      <div class="sb-demo"><b>Демо-режим.</b> Данные — вымышленные примеры, AI-анализ работает на встроенном движке правил без обращений в сеть. Подключение реальных источников — на следующем этапе.</div>
+      <div class="sb-demo expert-only"><b>Демо-режим.</b> Данные — вымышленные примеры, AI-анализ работает на встроенном движке правил без обращений в сеть.</div>
     </div>`;
+}
+/* ---------- v3.4 right drawer (quick preview / filters) ---------- */
+function ensureDrawer(){
+  if(!document.getElementById('drawer')){
+    const ovl = document.createElement('div'); ovl.id = 'drawer-ovl';
+    const dr = document.createElement('div'); dr.id = 'drawer'; dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','false');
+    dr.innerHTML = `<div class="dr-h"><div style="flex:1"><b id="drawer-title"></b><div class="xs muted" id="drawer-sub"></div></div>
+      <button class="btn xs gh" data-act="drawer-close" aria-label="Закрыть панель">${icon('x')}</button></div><div class="dr-b" id="drawer-body"></div>`;
+    document.body.appendChild(ovl); document.body.appendChild(dr);
+    ovl.onclick = closeDrawer;
+    document.addEventListener('keydown', e => { if(e.key==='Escape') closeDrawer(); });
+  }
+  return document.getElementById('drawer');
+}
+function openDrawer(title, sub, bodyHtml){
+  const dr = ensureDrawer();
+  document.getElementById('drawer-title').textContent = title||'';
+  document.getElementById('drawer-sub').textContent = sub||'';
+  document.getElementById('drawer-body').innerHTML = bodyHtml||'';
+  dr.classList.add('open'); document.getElementById('drawer-ovl').classList.add('open');
+  bindGlobal();
+  return document.getElementById('drawer-body');
+}
+function closeDrawer(){
+  const dr = document.getElementById('drawer'); if(!dr) return;
+  dr.classList.remove('open'); const o = document.getElementById('drawer-ovl'); if(o) o.classList.remove('open');
+}
+function leadPreviewHtml(id){
+  const l = leadById(id); if(!l) return '';
+  const a = l.analysis, c = a.contactability.primary, b = bandMeta(a.score.band);
+  const wn = (a.whyNow && (a.whyNow.best && a.whyNow.best.title)) || (a.raw && a.raw.whyNow && a.raw.whyNow.summary) || '';
+  const gap = (a.gap && a.gap.summary) || (a.raw && a.raw.gap && a.raw.gap.top) || '';
+  const row = (k,v) => `<div class="dr-row"><div class="k">${k}</div><div style="flex:1">${v||'<span class="faint">—</span>'}</div></div>`;
+  return row('Рейтинг', `<span class="score-num" style="color:${b.color}">${a.score.points}</span> <span class="badge ${b.cls}">${b.label}</span>`)
+    + row('Готовность к контакту', readyBadge(a.readiness.state))
+    + row('Этап работы', esc(PIPEC[l.stage]?PIPEC[l.stage].short:l.stage))
+    + row('Почему сейчас', esc(String(wn).slice(0,140)))
+    + row('Пробел в контенте', esc(String(gap).slice(0,140)))
+    + row('Оффер', esc(a.offers.primary?a.offers.primary.name:'не назначен'))
+    + row('Следующий шаг', l.nextStep?`<span style="color:var(--warm)">${esc(String(l.nextStep).slice(0,120))}</span>`:'')
+    + row('Контактное лицо', c&&c.name&&c.name!=='—'?esc(c.name)+' · '+esc(c.roleLabel):esc(a.contactability.reason).slice(0,80))
+    + `<div class="row mt14" style="gap:8px"><a class="btn pri" href="#/lead/${l.id}" data-act="drawer-close">${icon('doc')} Открыть карточку</a>
+       <button class="btn" data-act="enrich-run" data-id="${l.id}">${icon('search')} Обновить данные</button></div>`;
 }
 function setTopbar(title, sub, actionsHtml){
   const d = new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
@@ -5521,12 +5638,12 @@ function render(){
   $('#sidebar').classList.remove('open');
   const ss = document.getElementById('stage-sel');
   if(ss){ const lid = (location.hash.match(/^#\/lead\/(.+)$/)||[])[1];
-    ss.onchange = e => { setStage(lid, e.target.value, 'Стадия изменена вручную из карточки'); toast('Стадия: '+PIPEC[e.target.value].short,'ok'); render(); }; }
+    ss.onchange = e => { setStage(lid, e.target.value, 'Этап работы изменена вручную из карточки'); toast('Этап работы: '+PIPEC[e.target.value].short,'ok'); render(); }; }
   window.scrollTo(0,0);
 }
 
 /* ===================== 6. FILTERS ===================== */
-function resetFilters(){ UI.filters = {q:'', industry:'', city:'', rel:[], stage:[], tier:[], readiness:[], vertical:'', minScore:0, offer:'', outreach:'', lastContact:'', projectId:'', quick:null, showArchived:false}; UI.sel.clear(); }
+function resetFilters(){ UI.filters = {q:'', industry:'', city:'', rel:[], stage:[], tier:[], readiness:[], vertical:'', minScore:0, offer:'', outreach:'', lastContact:'', projectId:'', quick:null, showArchived:!!((DB.ui||{}).showArchived)}; UI.sel.clear(); }
 function applyQuick(k){ UI.filters.quick = (UI.filters.quick===k ? null : k); UI.filters.minScore = 0; UI.filters.stage=[]; UI.filters.outreach=''; UI.filters.offer=''; UI.filters.rel=[]; UI.filters.tier=[]; UI.filters.readiness=[]; UI.filters.vertical=''; UI.filters.q=''; UI.filters.industry=''; UI.filters.city=''; UI.filters.projectId=''; UI.filters.lastContact=''; }
 
 function filterLeads(list){
@@ -5694,209 +5811,141 @@ function dashMetrics(){
 
 function viewDashboard(){
   const m = dashMetrics();
-  setTopbar('Дашборд', `${m.all} лидов · средний Рейтинг лида ${m.avgScore} · средняя Достоверность аудита ${m.avgConf} · режим: ${PRODUCT_STATUS.mode}`,
-    `<button class="btn" data-act="new-project">${icon('search')} Проект поиска</button>
-     <button class="btn pri" data-act="new-lead">${icon('plus')} Добавить компанию</button>`);
-
-  const queue = activeLeads().filter(l => !isClosed(l) && l.outreachStatus!=='WON' && l.analysis.readiness.gate)
-    .sort((a,b)=> b.analysis.score.points - a.analysis.score.points);
-
-  /* v2.6: референс — одна строка из 5 KPI-карточек, спокойные карточки, один акцент */
-  const kpis = [
-    {k:'followup',    l:'На сегодня и просрочено', v:m.followUp, d:'плановые шаги и повторные касания'},
-    {k:'no_response', l:'Повторный контакт', v:m.noResponse, d:'молчание не трактуется как отказ'},
-    {k:'verified',    l:'Потребность подтверждена', v:m.verified, d:'зафиксированы слова клиента', hl:true},
-    {k:'ready_verify',l:'Готовы / нужна проверка', v:m.ready+m.verify, d:'коммерческий барьер готовности'},
-    {k:'to_contact',  l:'Очередь на контакт', v:m.toContact, d:'барьер пройден, рейтинг ≥ 60'}
-  ];
-
-  const funnel = [
-    ['Новые / не контактировали', m.fsNew],
-    ['Связались', m.fsContacted],
-    ['Нет ответа', m.fsNoResponse],
-    ['Получен ответ / передано', m.fsReply],
-    ['Повторное касание', m.followUp],
-    ['Выиграны / стоп', m.fsDone]
-  ];
-
-  const acts = actionItems().slice(0,5);
-  const work = queue.slice(0,3);
-
+  setTopbar('Сегодня', new Date().toLocaleDateString('ru-RU',{weekday:'long', day:'numeric', month:'long'}),
+    `<button class="btn pri" data-act="new-lead">${icon('plus')} Компания</button>`);
+  const act = activeLeads().filter(l=>!isClosed(l));
+  const canWrite = act.filter(l=>l.analysis.readiness.state==='READY');
+  const needCheck = act.filter(l=>l.analysis.readiness.state==='READY_VERIFY');
+  const follow = act.filter(l=>['NO_RESPONSE','FOLLOW_UP'].includes(l.outreachStatus));
+  const stop = act.filter(l=>l.analysis.readiness.state==='STOP');
+  const tiles = [
+    {cls:'ok', v:canWrite.length, l:'Можно писать'},
+    {cls:'warn', v:needCheck.length, l:'Нужно проверить'},
+    {cls:'acc', v:follow.length, l:'Follow-up'},
+    {cls:'hot', v:stop.length, l:'STOP'}];
+  const seenP = new Set();
+  const prio = [].concat(canWrite, needCheck, follow).filter(l=>{ if(seenP.has(l.id)) return false; seenP.add(l.id); return true; }).slice(0,8);
+  const rowFor = l => { const a = l.analysis; const state = a.readiness.state;
+    const why = (a.whyNow && a.whyNow.best && a.whyNow.best.title) || '';
+    const h0 = (a.readiness.holds||[])[0];
+    const hTxt = h0 ? (typeof h0==='string' ? h0 : (h0.text||h0.label||h0.reason||h0.title||h0.note||'')) : '';
+    const block = state==='READY_VERIFY' ? (hTxt||'нужна проверка')
+      : state==='STOP' ? 'контакт заблокирован'
+      : l.outreachStatus==='NO_RESPONSE' ? 'нет ответа на касание'
+      : state==='READY' ? (((a.verifiedNeed||{}).confirmed||[])[0] ? 'потребность подтверждена' : '') : '';
+    const next = l.nextStep || (state==='READY' ? 'Написать первое письмо' : 'Разобрать проверку');
+    return `<div class="next-row">
+      <div style="min-width:0"><div class="co">${esc(l.name)}</div><div class="sub">${esc(cityOf(l.cityKey).name)} · ${esc(IND(l.industry).label)}</div></div>
+      <div>${readyBadge(state)}</div>
+      <div class="xs">${why?esc(String(why).slice(0,90)):'<span class="faint">—</span>'}</div>
+      <div class="xs ${block?'':'faint'}">${block?esc(String(block).slice(0,90)):'ничего не мешает'}</div>
+      <div class="row" style="gap:8px;align-items:center"><span class="xs muted" style="max-width:160px">${esc(String(next).slice(0,64))}</span>
+        <a class="btn sm ${state==='READY'?'pri':''}" href="#/lead/${l.id}">${state==='READY'?'Написать':'Открыть'}</a></div>
+    </div>`; };
   $('#view').innerHTML = `
-  ${DB.ui.demoMode ? `<div class="demo-banner">${icon('info')} <div><b>Демо-режим.</b> Компании вымышлены, ИНН/ОГРН — примеры заполнения обязательного барьера. Прототип приведён к канону <b>MASTER CANONICAL</b> (snapshot 2026-09-09): Рейтинг лида = Potential 20 + Сигналы покупки 20 + Пробел в контенте 30 + Service Fit 20 + Logistics 10; Почему сейчас, Событие-повод, Доступность ЛПР, Достоверность аудита и все риски в Score <b>не входят</b> — они работают через отдельный коммерческий барьер <b>Готовность к контакту</b>.</div></div>` : ''}
-
-  <div class="kpis kpis-5">${kpis.map(k=>`<div class="kpi ${k.hl?'hl':''}">
-    <div class="k-l">${esc(k.l)}</div><div class="k-v">${k.v}</div><div class="k-d">${esc(k.d)}</div></div>`).join('')}</div>
-
-  <div class="grid g-3-2 mt20">
-    <div class="col">
-      <div class="card"><div class="card-h"><div><h3>Ближайшие действия</h3><div class="sub">что снять, чтобы лид пошёл дальше</div></div>
-        <div class="sp"></div><a class="btn sm" href="#/gates">${icon('shield')} Допуски</a></div>
-        <div class="card-b tight">${acts.length?acts.map(i=>`
-          <div class="act-row">
-            <span class="act-ico k-${i.kind}">${icon(i.ico)}</span>
-            <div class="act-tx"><a href="#/lead/${i.l.id}" class="b">${esc(i.l.name)}</a>
-              <div class="xs muted">${i.txt}</div></div>
-            ${i.dt?`<div class="xs faint nowrap">${i.dt}</div>`:''}
-            ${i.act?`<button class="btn xs" data-act="${i.act}" data-id="${i.l.id}">${i.actLabel}</button>`:''}
-          </div>`).join(''):`<div class="sm muted" style="padding:6px 4px">Нет приостанавливающих вопросов — очередь чистая.</div>`}</div></div>
-
-      <div class="card"><div class="card-h"><div><h3>Сейчас в работе</h3><div class="sub">очередь на контакт: порядок — по рейтингу, разрешение — по готовности</div></div>
-        <div class="sp"></div><a class="btn sm" href="#/priority">${icon('target')} Полный список</a></div>
-        <div class="card-b">${work.length?work.map(l=>queueCard(l)).join('')
-          :`<div class="sm muted">Очередь пуста: посмотрите раздел «Допуски» — там то, что нужно допроверить.</div>`}</div></div>
-
-      ${dashTasksHtml()}
-    </div>
-    <div class="col">
-      <div class="card"><div class="card-h"><div><h3>Воронка</h3><div class="sub">касания и исходы</div></div></div>
-        <div class="card-b tight">${funnel.map(([l,n])=>`<div class="fun-row"><div>${esc(l)}</div><b>${n}</b></div>`).join('')}</div></div>
-      <div class="card"><div class="card-h"><div><h3>Коммерческие разговоры</h3><div class="sub">содержательные диалоги о потребности и цене</div></div></div>
-        <div class="card-b">
-          <div class="dash-pl">${m.talks?'':'—'}</div>
-          <div class="sm">${m.talks} из ${m.touched} возможностей с записанными касаниями</div>
-          <div class="xs faint mt6">Калибровка методики — после 7–10 завершённых кейсов.</div>
-        </div></div>
-      <div class="callout acc"><div class="ct">${icon('sparkles')} Главный принцип</div>
-        ${esc(SCORE_MODEL.principleRu || 'Рейтинг лида — это структурный порядок, а не разрешение на контакт. Разрешение даёт готовность к контакту.')}</div>
-    </div>
-  </div>
-
-  <div class="sec-t"><h2>Требует действия</h2><span class="hint">полный список снятий барьеров и просроченных шагов</span></div>
-  ${actionList()}`;
+    <div class="stat-row">${tiles.map(t=>`<div class="stat-tile ${t.cls}"><div class="v">${t.v}</div><div class="l">${t.l}</div></div>`).join('')}</div>
+    <div class="card mt14"><div class="card-h"><div class="ct">${icon('target')} Следующие действия</div><span class="sp"></span>
+      <span class="xs muted">приоритет: можно писать → проверить → follow-up</span></div>
+      <div class="card-b" style="padding:8px">${prio.length?prio.map(rowFor).join('')
+        :`<div class="empty-pad"><div class="b">На сегодня всё разобрано</div><div class="xs muted mt6">Добавьте компанию или откройте «Поиск компаний».</div></div>`}</div></div>
+    <details class="exp-sec expert-only"><summary>Экспертная сводка дня</summary><div class="exp-b">
+      <div class="xs muted">Лидов: ${m.all} · средний Рейтинг лида ${m.avgScore} · Достоверность аудита ${m.avgConf} · Follow-up ${m.followUp} · без ответа ${m.noResponse} · потребность подтверждена ${m.verified} · режим ${PRODUCT_STATUS.mode}.</div>
+      <div class="xs muted mt6">Детальные разрезы — экспертные разделы «Допуски и готовность» и «Контакты и касания».</div>
+    </div></details>`;
   bindGlobal();
 }
-function queueCard(l){
-  const a = l.analysis;
-  return `<div class="work-panel">
-    <div class="row nw" style="gap:10px"><a class="b" href="#/lead/${l.id}" style="font-size:14px">${esc(l.name)}</a>
-      <span class="badge gray">${esc(a.vertical)}</span>${readyBadge(a.readiness.state)}
-      <div class="sp"></div>${scoreRingBand(a.score.points)}</div>
-    <div class="sm muted mt6">${esc(a.summary)}</div>
-    <div class="row mt10" style="gap:6px"><span class="badge outline">${esc(PIPEC[l.stage].short)}</span><span class="badge outline">${esc(IND(l.industry).label)}</span><span class="badge outline">${esc(cityOf(l.cityKey).name)}</span></div>
-    <div class="row mt10" style="gap:8px">
-      ${a.readiness.gate?`<button class="btn sm pri" data-act="open-outreach" data-id="${l.id}">${icon('send')} Написать</button>`
-        :`<button class="btn sm" data-act="open-gate" data-id="${l.id}">${icon('shield')} Снять допуск</button>`}
-      <a class="btn sm gh" href="#/lead/${l.id}">${icon('doc')} Карточка</a>
-    </div></div>`;
+function refreshLeadsView(){
+  const q = $('#qchips'); if(q) q.innerHTML = quickChips();
+  const body = $('#leads-body');
+  if(body){ body.innerHTML = DB.ui.viewMode==='kanban'?kanbanHtml(filterLeads(DB.leads)):tableHtml(filterLeads(DB.leads)); bindLeadsBody(); }
+  bindGlobal();
 }
-
-function actionItems(){
-  const items = [];
-  activeLeads().forEach(l => {
-    const a = l.analysis;
-    if(isClosed(l)) return;
-    if(a.readiness.state==='HOLD') a.readiness.holds.forEach(h => items.push({p:0, l, kind:'hold', ico:'alert',
-      txt:`<b>Приостановлен:</b> ${esc(h.text)}`, act:'open-gate', actLabel:'Снять допуск'}));
-    if(a.readiness.state==='READY_VERIFY') items.push({p:1, l, kind:'verify', ico:'eye',
-      txt:`<b>Перед контактом проверить:</b> ${esc(a.readiness.verifies.map(v=>v.text).join(' · '))}`, act:'open-gate', actLabel:'Проверки'});
-    if(l.nextStepDate && l.nextStepDate <= iso(TODAY)) items.push({p:0, l, kind:'followup', ico:'clock',
-      txt:`Просрочен плановый шаг: ${esc(l.nextStep||'—')}`, dt:fmtDate(l.nextStepDate), act:'record-feedback', actLabel:'Записать результат'});
-    if(l.outreachStatus==='NO_RESPONSE' && daysAgo(l.lastContactAt)>=5) items.push({p:1, l, kind:'followup', ico:'refresh',
-      txt:`Нет ответа ${daysAgo(l.lastContactAt)} дн. Молчание не трактуется как NO NEED — нужно второе касание на другого ЛПР или другой канал.`, dt:fmtDate(l.lastContactAt), act:'open-outreach', actLabel:'Повторное касание'});
-    if(l.outreachStatus==='GATEKEEPER_ACK') items.push({p:2, l, kind:'wait', ico:'handshake',
-      txt:`GATEKEEPER ACK: не писать повторно в тот же канал, ждать инициативы ответственного специалиста; параллельно искать прямого владельца задачи.`, act:'add-contact', actLabel:'Найти ЛПР'});
-    if(a.entity.status==='NOT_RESOLVED') items.push({p:0, l, kind:'legal', ico:'shield',
-      txt:`Юрлицо не установлено: нельзя проводить финансово-юридический risk analysis неизвестного юрлица.`, act:'edit-entity', actLabel:'Разрешить юрлицо'});
-    if(a.entity.status==='VERIFY') items.push({p:0, l, kind:'legal', ico:'shield',
-      txt:`ЮРЛИЦО: ТРЕБУЕТСЯ СВЕРКА — источники противоречат по юрлицу/ИНН → риск контрагента: не определён / держим.`, act:'edit-entity', actLabel:'Сверить источники'});
-    if(a.contactability.level==='LOW' && a.score.points>=60) items.push({p:1, l, kind:'lpr', ico:'user',
-      txt:`Score ${a.score.points}, но Доступность ЛПР LOW: ${esc(a.contactability.reason)}`, act:'add-contact', actLabel:'Найти ЛПР'});
-    if(a.conf.level==='LOW' && a.score.points>=40) items.push({p:1, l, kind:'data', ico:'alert',
-      txt:`Достоверность аудита LOW: ${esc(a.conf.missing.slice(0,3).join(', '))}. «Нет данных» ≠ «есть Пробел в контенте».`, act:'edit-facts', actLabel:'Дособрать footprint'});
-    if(a.risks.layers.PROCUREMENT.level==='HIGH') items.push({p:2, l, kind:'proc', ico:'layers',
-      txt:`Закупочный риск HIGH: уточнить закупочный маршрут и владельца задачи по корпоративным материалам.`, act:'open-gate', actLabel:'Закупочный маршрут'});
-    if((l.verifiedContentNeeds||[]).some(v=>v.status==='REJECTED') && a.readiness.state!=='REJECT_RESERVE') items.push({p:1, l, kind:'feedback', ico:'handshake',
-      txt:'Клиент опроверг потребность — перевести в Отклонён / в резерве и не продавать старую гипотезу.', act:'record-feedback', actLabel:'Зафиксировать'});
-    if(a.watchlist.eligible && a.whyNow.score<38 && !l.watch) items.push({p:3, l, kind:'watch', ico:'clock',
-      txt:`Подходит, но сильного Почему сейчас нет → WATCHLIST (${esc(a.watchlist.reason||'сезон / новое событие')}).`, act:'set-watch', actLabel:'В Лист наблюдения'});
-    if(l.lastVerifiedAt && daysAgo(l.lastVerifiedAt)>60) items.push({p:2, l, kind:'stale', ico:'refresh',
-      txt:`Факты проверены ${relDays(l.lastVerifiedAt)}: перед контактом обновить изменяемые данные.`, act:'edit-facts', actLabel:'Обновить'});
-  });
-  items.sort((x,y)=> x.p-y.p || (y.l.analysis.score.points - x.l.analysis.score.points));
-  return items;
-}
-function actionList(){
-  const items = actionItems();
-  if(!items.length) return `<div class="card"><div class="card-b">${emptyState('Всё чисто','Нет приостанавливающих вопросов, просроченных шагов и неразрешённых юрлиц.','', 'check')}</div></div>`;
-  return `<div class="card"><div class="card-b tight">${items.slice(0,18).map(i=>`
-    <div class="act-row">
-      <span class="act-ico k-${i.kind}">${icon(i.ico)}</span>
-      <a href="#/lead/${i.l.id}" class="b" style="min-width:170px">${esc(i.l.name)}</a>
-      <div class="act-tx"><div class="xs">${i.txt}</div></div>
-      ${i.dt?`<div class="xs faint nowrap">${i.dt}</div>`:''}
-      ${i.act?`<button class="btn xs ${i.kind==='hold'||i.kind==='legal'?'pri':''}" data-act="${i.act}" data-id="${i.l.id}">${i.actLabel}</button>`:''}
-    </div>`).join('')}</div></div>`;
-}
-
-/* ===================== 6.2 ВСЕ ЛИДЫ ===================== */
 function viewLeads(){
-  setTopbar('Все лиды', `${(UI.filters.showArchived?DB.leads.length:activeLeads().length)} компаний · Score — структурный рейтинг, Readiness — допуск к контакту`,
-    `<div class="row">
+  const n = UI.filters.showArchived ? DB.leads.length : activeLeads().length;
+  setTopbar('Компании', `${n} компаний · клик по строке — быстрый просмотр`,
+    `<button class="btn pri" data-act="new-lead">${icon('plus')} Компания</button>`);
+  const f = UI.filters;
+  const indOpts = [{v:'',t:'Все отрасли'}].concat(Object.keys(INDUSTRIES).map(k=>({v:k,t:INDUSTRIES[k].label})));
+  const cityOpts = [{v:'',t:'Все города'}].concat(uniq(DB.leads.map(l=>l.cityKey)).map(k=>({v:k,t:cityOf(k).name})));
+  const extra = (f.stage||[]).length+(f.tier||[]).length+(f.readiness||[]).length+(f.rel||[]).length+(f.offer?1:0)+(f.outreach?1:0)+(f.projectId?1:0)+(f.minScore?1:0)+(f.lastContact?1:0);
+  $('#view').innerHTML = `<div class="card"><div class="card-b" style="padding:12px 14px">
+    <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="tb-q" class="inp sm" style="width:230px" placeholder="Поиск: компания, контакт, ИНН…" value="${esc(f.q)}" aria-label="Поиск по компаниям">
+      <span id="qchips" class="row" style="gap:6px;flex-wrap:wrap">${quickChips()}</span>
+      <select id="tb-ind" class="inp sm" aria-label="Вертикаль">${indOpts.map(o=>`<option value="${o.v}" ${f.industry===o.v?'selected':''}>${esc(o.t)}</option>`).join('')}</select>
+      <select id="tb-city" class="inp sm" aria-label="Город">${cityOpts.map(o=>`<option value="${o.v}" ${f.city===o.v?'selected':''}>${esc(o.t)}</option>`).join('')}</select>
+      <button class="btn sm" data-act="filters-drawer">${icon('filter')} Все фильтры${extra?` · ${extra}`:''}</button>
+      <div class="sp"></div>
+      <button class="btn sm gh" data-act="cols-pop">${icon('list')} Столбцы</button>
       <div class="seg">
         <button class="btn sm ${DB.ui.viewMode==='table'?'seg-on':'gh'}" data-act="view-mode" data-m="table">${icon('list')} Таблица</button>
-        <button class="btn sm ${DB.ui.viewMode==='kanban'?'seg-on':'gh'}" data-act="view-mode" data-m="kanban">${icon('kanban')} Канон-цепочка</button>
+        <button class="btn sm ${DB.ui.viewMode==='kanban'?'seg-on':'gh'}" data-act="view-mode" data-m="kanban">${icon('kanban')} Цепочка</button>
       </div>
-      <button class="btn" data-act="export-csv">${icon('down')} CSV</button>
-      <button class="btn pri" data-act="new-lead">${icon('plus')} Добавить</button></div>`);
-  /* список лидов работает со всей базой: видимость архивных компаний определяет фильтр «показывать архив» */
-  const list = filterLeads(DB.leads);
-  $('#view').innerHTML = `${quickChips()}${filterBar()}<div class="mt14" id="leads-body">${DB.ui.viewMode==='kanban'?kanbanHtml(list):tableHtml(list)}</div>`;
-  bindFilterBar(document, ()=>{ $('#leads-body').innerHTML = DB.ui.viewMode==='kanban'?kanbanHtml(filterLeads(DB.leads)):tableHtml(filterLeads(DB.leads)); bindLeadsBody(); });
+      <button class="btn sm" data-act="export-csv">${icon('down')} CSV</button>
+    </div></div></div>
+    <div class="mt10" id="leads-body">${DB.ui.viewMode==='kanban'?kanbanHtml(filterLeads(DB.leads)):tableHtml(filterLeads(DB.leads))}</div>`;
+  const tq = $('#tb-q'); if(tq) tq.oninput = e => { UI.filters.q = e.target.value; refreshLeadsView(); };
+  const ti = $('#tb-ind'); if(ti) ti.onchange = e => { UI.filters.industry = e.target.value; refreshLeadsView(); };
+  const tc = $('#tb-city'); if(tc) tc.onchange = e => { UI.filters.city = e.target.value; refreshLeadsView(); };
   bindLeadsBody(); bindGlobal();
 }
 function quickChips(){
   const f = UI.filters.quick;
-  const chips = [['ready','READY'],['verify','Готов после проверки'],['hold','HOLD'],['reject','Отклонён / в резерве'],['high','Score 80+'],
-    ['to_contact','Очередь на контакт'],['legal','Юрлицо не установлено'],['watchlist','Лист наблюдения'],['procurement','Закупочный риск'],
-    ['no_response','Без ответа'],['followup','Повторное касание'],['warm','Тёплые'],['won','Выигранные'],['lost','Потерянные / STOP'],['lowconf','Audit не HIGH'],['new','Новые']];
-  return `<div class="row mb10" style="gap:6px">${chips.map(([k,l])=>
-    `<button class="chk ${f===k?'on':''}" data-act="quick" data-k="${k}">${l}</button>`).join('')}
-    ${f?`<button class="btn xs gh" data-act="quick" data-k="${f}">${icon('x')} снять</button>`:''}</div>`;
+  const chips = [['ready','Можно писать'],['verify','Нужно проверить'],['followup','Follow-up'],['lost','STOP'],['new','Новые']];
+  return `${chips.map(([k,l])=>`<button class="qchip ${f===k?'on':''}" data-act="quick" data-k="${k}">${l}</button>`).join('')}
+    ${f?`<button class="btn xs gh" data-act="quick" data-k="${f}">${icon('x')} снять</button>`:''}`;
 }
 const COLS = [
-  {k:'name', t:'Компания', w:'20%'}, {k:'vertical', t:'Вертикаль'}, {k:'city', t:'Город'},
-  {k:'score', t:'Рейтинг лида'}, {k:'readiness', t:'Readiness'}, {k:'legal', t:'Юрлицо'},
-  {k:'contactability', t:'Доступность ЛПР'}, {k:'offer', t:'Основной оффер'}, {k:'lpr', t:'ЛПР'},
-  {k:'stage', t:'Стадия'}, {k:'relationship', t:'Отношения'}, {k:'outreach', t:'Контакт'},
-  {k:'last', t:'Последний контакт'}, {k:'conf', t:'Audit Conf.'}
+  {k:'name', t:'Компания', w:'22%'}, {k:'score', t:'Рейтинг'}, {k:'readiness', t:'Готовность'},
+  {k:'stage', t:'Этап работы'}, {k:'next', t:'Следующее действие'}, {k:'last', t:'Последний контакт'},
+  {k:'vertical', t:'Вертикаль', d:true}, {k:'city', t:'Город', d:true}, {k:'legal', t:'Юрлицо', d:true},
+  {k:'contactability', t:'Контактное лицо', d:true}, {k:'offer', t:'Основной оффер', d:true}, {k:'lpr', t:'ЛПР', d:true},
+  {k:'relationship', t:'Отношения', d:true}, {k:'outreach', t:'Контакт', d:true}, {k:'conf', t:'Достоверность', d:true}
 ];
+const LEAD_COLS_DEFAULT = COLS.filter(c=>!c.d).map(c=>c.k);
+const leadColsVis = () => DB.ui.leadCols || LEAD_COLS_DEFAULT;
 function tableHtml(list){
   if(!list.length) return `<div class="card"><div class="card-b">${emptyState('Ничего не найдено','Под фильтры не подходит ни одна компания.','<button class="btn" data-act="reset-filters">'+icon('refresh')+' Сбросить фильтры</button>','filter')}</div></div>`;
+  const vis = leadColsVis();
+  const cell = (k, l) => { const a=l.analysis, c=a.contactability.primary, b=bandMeta(a.score.band);
+    switch(k){
+      case 'name': return `<td><div class="co-cell"><div class="co-logo">${initials(l.name)}</div>
+          <div style="min-width:0"><div class="co-name">${esc(l.name)}${l.archived?' <span class="badge gray">АРХИВ</span>':''}</div>
+          <div class="co-meta">${esc(l.subindustry||IND(l.industry).label)}${l.watch?' · <b>WATCH</b>':''}</div></div></div></td>`;
+      case 'score': return `<td><div class="score-cell"><span class="score-num" style="color:${b.color}">${a.score.points}</span>${miniBar(a.score.points,b.color)}
+          <span class="badge ${b.cls}">${b.label}</span></div></td>`;
+      case 'readiness': return `<td>${readyBadge(a.readiness.state)}</td>`;
+      case 'stage': return `<td class="xs">${esc(PIPEC[l.stage]?PIPEC[l.stage].short:l.stage)}</td>`;
+      case 'next': return `<td class="xs">${l.nextStep?`<span style="color:var(--warm)">${esc(String(l.nextStep).slice(0,70))}</span>`:'<span class="faint">—</span>'}</td>`;
+      case 'last': return `<td class="xs nowrap">${l.lastContactAt?`${fmtDate(l.lastContactAt)}<div class="faint">${relDays(l.lastContactAt)}</div>`:'<span class="faint">—</span>'}</td>`;
+      case 'vertical': return `<td class="xs">${esc(a.vertical)}</td>`;
+      case 'city': return `<td class="xs nowrap">${esc(cityOf(l.cityKey).name)}${a.distKm!=null?`<div class="faint">${a.distKm} км</div>`:''}</td>`;
+      case 'legal': return `<td>${legalBadge(a.entity)}</td>`;
+      case 'contactability': return `<td>${contactBadge(a.contactability.level)}</td>`;
+      case 'offer': return `<td class="xs">${esc(a.offers.primary?a.offers.primary.name:'—')}${a.offers.secondary?`<div class="faint">+ ${esc(a.offers.secondary.name)}</div>`:''}</td>`;
+      case 'lpr': return `<td class="xs">${c&&c.name&&c.name!=='—'?`<div class="b">${esc(c.name)}</div><div class="faint">${esc(c.roleLabel)}</div>`:`<span class="faint">не установлен</span>`}</td>`;
+      case 'relationship': return `<td>${relBadge(l.relationship)}</td>`;
+      case 'outreach': return `<td>${outBadge(l.outreachStatus)}${l.outcome?`<div class="xs b mt6" style="color:${l.outcome==='WON'?'#047857':'#b91c1c'}">${l.outcome}</div>`:''}</td>`;
+      case 'conf': return `<td class="xs"><span class="conf ${confClass(a.conf.conf)}">${a.conf.level}</span></td>`;
+      default: return '';
+    } };
   return `<div class="tbl-wrap">
     ${UI.sel.size?`<div class="row" style="padding:9px 12px;background:var(--acc-2);border-bottom:1px solid #c7d2fe;gap:8px">
       <b class="sm">Выбрано: ${UI.sel.size}</b>
-      <button class="btn xs" data-act="bulk-stage">Изменить стадию</button>
+      <button class="btn xs" data-act="bulk-stage">Изменить этап</button>
       <button class="btn xs" data-act="bulk-rel">Изменить Отношения</button>
       <button class="btn xs" data-act="bulk-analysis">Пересчитать анализ</button>
       <button class="btn xs gh" data-act="bulk-clear">Снять выделение</button></div>`:''}
     <div class="tbl-scroll"><table class="tbl"><thead><tr>
       <th class="nosort" style="width:34px"><input type="checkbox" id="sel-all" ${UI.sel.size && UI.sel.size===list.length?'checked':''}></th>
-      ${COLS.map(c=>`<th data-act="sort" data-k="${c.k}" ${c.w?`style="width:${c.w}"`:''}>${c.t}${UI.sort.key===c.k?(UI.sort.dir>0?' ↑':' ↓'):''}</th>`).join('')}
+      ${COLS.map(c=>vis.includes(c.k)?`<th data-act="sort" data-k="${c.k}" ${c.w?`style="width:${c.w}"`:''}>${c.t}${UI.sort.key===c.k?(UI.sort.dir>0?' ↑':' ↓'):''}</th>`:'').join('')}
       </tr></thead><tbody>
-      ${list.map(l=>{ const a=l.analysis, c=a.contactability.primary, b=bandMeta(a.score.band);
+      ${list.map(l=>{
         return `<tr data-id="${l.id}" class="${UI.sel.has(l.id)?'sel':''}" ${l.archived?'style="opacity:.62" title="Компания в архиве"':''}>
         <td><input type="checkbox" data-sel="${l.id}" ${UI.sel.has(l.id)?'checked':''}></td>
-        <td><div class="co-cell"><div class="co-logo">${initials(l.name)}</div>
-          <div style="min-width:0"><div class="co-name">${esc(l.name)}${l.archived?' <span class="badge gray">АРХИВ</span>':''}</div>
-          <div class="co-meta">${esc(l.subindustry||IND(l.industry).label)}${l.simulated?' · sim':''}${l.watch?' · <b>WATCH</b>':''}</div></div></div></td>
-        <td class="xs">${esc(a.vertical)}</td>
-        <td class="xs nowrap">${esc(cityOf(l.cityKey).name)}${a.distKm!=null?`<div class="faint">${a.distKm} км</div>`:''}</td>
-        <td><div class="score-cell"><span class="score-num" style="color:${b.color}">${a.score.points}</span>${miniBar(a.score.points,b.color)}
-          <span class="badge ${b.cls}">${b.label}</span></div>
-          <div class="xs faint">P${a.score.components.potential.points} · B${a.score.components.buying.points} · G${a.score.components.gap.points} · F${a.score.components.fit.points} · L${a.score.components.logistics.points}</div></td>
-        <td>${readyBadge(a.readiness.state)}</td>
-        <td>${legalBadge(a.entity)}</td>
-        <td>${contactBadge(a.contactability.level)}</td>
-        <td class="xs">${esc(a.offers.primary?a.offers.primary.name:'—')}${a.offers.secondary?`<div class="faint">+ ${esc(a.offers.secondary.name)}</div>`:''}</td>
-        <td class="xs">${c&&c.name&&c.name!=='—'?`<div class="b">${esc(c.name)}</div><div class="faint">${esc(c.roleLabel)}</div>`:`<span class="faint">${esc(a.contactability.level==='LOW'?'не установлен':'роль без имени')}</span>`}</td>
-        <td class="xs">${esc(PIPEC[l.stage]?PIPEC[l.stage].short:l.stage)}</td>
-        <td>${relBadge(l.relationship)}</td>
-        <td>${outBadge(l.outreachStatus)}${l.outcome?`<div class="xs b mt6" style="color:${l.outcome==='WON'?'#047857':'#b91c1c'}">${l.outcome}</div>`:''}</td>
-        <td class="xs nowrap">${l.lastContactAt?`${fmtDate(l.lastContactAt)}<div class="faint">${relDays(l.lastContactAt)}</div>`:'<span class="faint">—</span>'}</td>
-        <td class="xs"><span class="conf ${confClass(a.conf.conf)}">${a.conf.level}</span><div class="faint">${round(a.conf.conf,2)}</div></td></tr>`; }).join('')}
+        ${COLS.map(c=>vis.includes(c.k)?cell(c.k,l):'').join('')}</tr>`; }).join('')}
       </tbody></table></div>
-    <div class="card-f row"><span class="xs muted">Показано ${list.length} из ${(UI.filters.showArchived?DB.leads.length:activeLeads().length)} · формат массовой таблицы соответствует канону: ${MASS_RESULT_COLUMNS.join(' | ')}</span>
+    <div class="card-f row"><span class="xs muted">Показано ${list.length} из ${(UI.filters.showArchived?DB.leads.length:activeLeads()).length|| (UI.filters.showArchived?DB.leads.length:activeLeads().length)}</span>
       <div class="sp"></div><button class="btn sm" data-act="export-csv">${icon('down')} Экспорт CSV</button></div></div>`;
 }
 function kanbanHtml(list){
@@ -5929,7 +5978,9 @@ function bindLeadsBody(){
     const id = cb.getAttribute('data-sel');
     if(UI.sel.has(id)) UI.sel.delete(id); else UI.sel.add(id);
     body.innerHTML = DB.ui.viewMode==='kanban'?kanbanHtml(filterLeads(activeLeads())):tableHtml(filterLeads(activeLeads())); bindLeadsBody(); });
-  $$('tr[data-id]', body).forEach(tr => tr.onclick = e => { if(e.target.closest('input,button')) return; location.hash = '#/lead/'+tr.getAttribute('data-id'); });
+  $$('tr[data-id]', body).forEach(tr => tr.onclick = e => { if(e.target.closest('input,button,a')) return;
+    const id = tr.getAttribute('data-id'); const l = leadById(id); if(!l) return;
+    openDrawer(l.name, (cityOf(l.cityKey).name||'')+' · '+(IND(l.industry).label||''), leadPreviewHtml(id)); });
   $$('.kcard', body).forEach(c => {
     c.ondragstart = e => { e.dataTransfer.setData('text/plain', c.getAttribute('data-id')); c.classList.add('drag'); };
     c.ondragend = () => c.classList.remove('drag'); });
@@ -6915,7 +6966,7 @@ function tabFacts(l){
 /* ---------- История ---------- */
 function tabHistory(l){
   const h = (l.history||[]);
-  const typeLabel = {create:'Создание', update:'Изменение', facts:'Факты', analysis:'Анализ', stage:'Стадия', offer:'Оффер',
+  const typeLabel = {create:'Создание', update:'Изменение', facts:'Факты', analysis:'Анализ', stage:'Этап работы', offer:'Оффер',
     contact:'ЛПР', outreach:'Контакт', feedback:'Feedback', verified:'Verified Need', risk:'Риск', relationship:'Отношения', system:'Система'};
   return `<div class="grid g-2-1">
     <div class="card"><div class="card-h">${icon('clock')}<div><h3>История изменений</h3><div class="sub">все изменения анализа, допусков и коммуникации</div></div>
@@ -6956,8 +7007,9 @@ function tabHistory(l){
 /* ===================== 6.6 DISCOVERY ===================== */
 function viewDiscovery(r){
   const projectId = r.params[1];
-  setTopbar('Discovery', 'Поиск потенциальных компаний по отрасли, географии, типу и размеру бизнеса',
-    `<button class="btn pri" data-act="new-project">${icon('plus')} Новый проект поиска</button>`);
+  setTopbar('Поиск компаний', 'Отрасль, регион и тип организации — первый слой; остальное в «Расширенных параметрах»',
+    `<button class="btn sm gh" data-act="discovery-help" title="Как работает поиск">${icon('help')}</button>
+     <button class="btn pri" data-act="new-project">${icon('plus')} Новый проект поиска</button>`);
   const q = UI.discoveryDraft || (UI.discoveryDraft = {name:'', industry:'manufacturing', region:'udmurtia', radiusKm:100,
     minEmployees:20, maxEmployees:500, count:12, types:[], notes:'', projectId: projectId||''});
   if(projectId && !q.projectId) q.projectId = projectId;
@@ -7591,7 +7643,7 @@ function modalFeedback(id, opts){
         openModal({title:'Обратная связь сработал', icon:'refresh', size:'narrow',
           body:`<div class="grid g2 mb14">
             ${[['Рейтинг лида', res.before.score+' → '+res.after.score],['Band', res.before.band+' → '+res.after.band],
-               ['Readiness', res.before.readiness+' → '+res.after.readiness],['Стадия', (PIPEC[res.before.stage]||{short:res.before.stage}).short+' → '+((PIPEC[res.after.stage]||{short:res.after.stage}).short)]]
+               ['Готовность', res.before.readiness+' → '+res.after.readiness],['Этап работы', (PIPEC[res.before.stage]||{short:res.before.stage}).short+' → '+((PIPEC[res.after.stage]||{short:res.after.stage}).short)]]
               .map(([k,vv])=>`<div class="hintbox"><div class="xs muted b">${k}</div><div class="b mt6">${esc(vv)}</div></div>`).join('')}
             </div>
             ${res.corrections.length?`<div class="callout warn"><div class="ct">${icon('info')} Скорректировано</div>${res.corrections.map(c=>'<div class="xs">• '+esc(c)+'</div>').join('')}</div>`
@@ -7833,7 +7885,7 @@ function onAct(e){
     case 'sort': { const k = el.getAttribute('data-k');
         UI.sort = {key:k, dir: UI.sort.key===k ? -UI.sort.dir : (['name','industry','city','offer','lpr','outreach'].includes(k)?1:-1)};
         render(); break; }
-    case 'reset-filters': resetFilters(); render(); break;
+    case 'reset-filters': DB.ui.showArchived = false; save(); resetFilters(); render(); break;
     case 'quick': { const k = el.getAttribute('data-k'); applyQuick(k); if(parseHash().view!=='leads') location.hash='#/leads'; render(); break; }
     case 'bulk-clear': UI.sel.clear(); render(); break;
     case 'bulk-stage': bulkSelectModal('stage'); break;
@@ -7871,8 +7923,38 @@ function onAct(e){
       DB.ui = DB.ui || {};
       DB.ui.simpleMode = !simpleIsOn();
       save(); simpleApply(); render();
-      toast(simpleIsOn() ? 'Простой режим включён' : 'Полный режим: все разделы и панели на месте', 'ok');
+      toast(simpleIsOn() ? 'Простой режим включён' : 'Экспертный режим: все разделы и панели на месте', 'ok');
       break; }
+    case 'mode-set': {
+      DB.ui = DB.ui || {};
+      DB.ui.simpleMode = el.getAttribute('data-k') !== 'expert';
+      save(); simpleApply(); render();
+      break; }
+    case 'drawer-close': e.preventDefault(); closeDrawer(); break;
+    case 'lead-preview': e.preventDefault(); {
+      const l = leadById(id); if(l) openDrawer(l.name, (cityOf(l.cityKey).name||'') + ' · ' + (IND(l.industry).label||''), leadPreviewHtml(id));
+      break; }
+    case 'filters-drawer': e.preventDefault(); {
+      const b = openDrawer('Все фильтры', 'Дополнительные условия отбора', filterBar() +
+        `<div class="row mt14" style="gap:8px"><button class="btn" data-act="reset-filters">${icon('refresh')} Сбросить всё</button></div>`);
+      bindFilterBar(b, ()=>{ DB.ui.showArchived = !!UI.filters.showArchived; save(); refreshLeadsView(); });
+      break; }
+    case 'cols-pop': e.preventDefault(); {
+      const vis = DB.ui.leadCols || LEAD_COLS_DEFAULT;
+      openModal({title:'Настроить столбцы', icon:'list', size:'narrow',
+        body:`<div class="col">${COLS.map(c=>`<label class="chk ${vis.includes(c.k)?'on':''}" style="margin:3px 0"><input type="checkbox" data-col="${c.k}" ${vis.includes(c.k)?'checked':''}> ${esc(c.t)}</label>`).join('')}</div>`,
+        footer:`<div class="sp"></div><button class="btn pri" data-close="1">Готово</button>`,
+        onMount: root => { $$('input[data-col]', root).forEach(cb => cb.onchange = () => {
+          DB.ui.leadCols = $$('input[data-col]', root).filter(x=>x.checked).map(x=>x.getAttribute('data-col'));
+          if(!DB.ui.leadCols.includes('name')) DB.ui.leadCols.unshift('name');
+          save(); const body = $('#leads-body'); if(body){ body.innerHTML = tableHtml(filterLeads(DB.leads)); bindLeadsBody(); } }); }});
+      break; }
+    case 'set-tab': e.preventDefault(); UI.setTab = el.getAttribute('data-k'); render(); break;
+    case 'discovery-help': e.preventDefault(); openModal({title:'Как работает поиск компаний', icon:'help', size:'wide',
+      body:`<div class="xs" style="line-height:1.7">Поиск идёт каскадом: <b>официальный сайт компании</b> (если известен) → локальный SearXNG (best-effort) → авторитетные каталоги.
+        Найденное попадает в <b>Preview</b> с указанием источника и уверенности; запись в карточку — только после ваших галочек.
+        Если поисковики ограничены (CAPTCHA/rate-limit), Lumo продолжает работать с официальным сайтом и показывает состояние источников.</div>`,
+      footer:`<div class="sp"></div><button class="btn pri" data-close="1">Понятно</button>`}); break;
     case 'edit-model': e.preventDefault(); modalModel(id); break;
     case 'edit-digital': e.preventDefault(); modalDigital(id); break;
     case 'open-gate': e.preventDefault(); modalGate(id); break;
@@ -8304,6 +8386,27 @@ window.APP = {
 
 /* ===== part12_settings_help.js ===== */
 /* ===================== 6.7 НАСТРОЙКИ (профиль исполнителя + канон) ===================== */
+function settingsApplyTabs(){
+  const v = $('#view'); if(!v || v.querySelector('.set-tabs')) return;
+  UI.setTab = UI.setTab || 'profile';
+  const tabs = [['profile','Профиль'],['economy','Экономика'],['method','Методика'],['sources','Источники'],['data','Данные'],['about','О приложении']];
+  const bar = document.createElement('div'); bar.className = 'set-tabs'; bar.setAttribute('role','tablist');
+  bar.innerHTML = tabs.map(([k,t])=>`<button class="${UI.setTab===k?'on':''}" data-act="set-tab" data-k="${k}" role="tab">${t}</button>`).join('');
+  v.prepend(bar);
+  const classify = card => {
+    const h = (card.id||'') + ' ' + card.innerHTML.slice(0, 400);
+    if(card.id==='enrich-settings-card' || /adapters-reset|adapters-test|Источники данных/.test(h)) return 'sources';
+    if(/id="p_name"|baseCity|Профиль исполнителя|capability/.test(h)) return 'profile';
+    if(/Цена|Объём|OFFERS|rate|минимальн/.test(h)) return 'economy';
+    if(/SCORE_WEIGHTS|Вес|Канон|MASTER|readiness-правила/.test(h)) return 'method';
+    if(/backup|Резерв|Импорт|import-file|dataset|Очистить всё|demo-mode/.test(h)) return 'data';
+    return 'about'; };
+  v.querySelectorAll('.card').forEach(card => {
+    const t = classify(card);
+    card.style.display = (t===UI.setTab) ? '' : 'none';
+    if(/Очистить всё/.test(card.innerHTML)) card.classList.add('destruct-zone');
+  });
+}
 function viewSettings(){
   const p = DB.profile;
   setTopbar('Профиль исполнителя и канон', 'Данные исполнителя определяют Service Fit и Logistics; веса Рейтинг лида зафиксированы MASTER-решением',
@@ -8440,6 +8543,7 @@ function viewSettings(){
   bindChecks(document);
   const dm = $('#demo-mode'); if(dm) dm.onchange = e => { DB.ui.demoMode = e.target.checked; save(); render(); };
   const imp = $('#import-file'); if(imp) imp.onchange = e => { if(e.target.files[0]) importJson(e.target.files[0]); };
+  settingsApplyTabs();
   bindGlobal();
 }
 
@@ -9617,9 +9721,9 @@ function aiPreviewFor(action, leadId, rawJson, feedback){
     if(!rows.length) warnings.push('Нет применимых изменений: все ключи updates либо запрещены к изменению, либо совпадают с текущими.');
   } else if(action==='CLIENT_RESPONSE_ANALYSIS'){
     rows.push({key:'client_feedback', title:'Ответ клиента и связанные статусы (применяются вместе)', target:'feedback',
-      before:{Подтверждённая_потребность: aiVerifiedState(l), Результат: l.outreachStatus, Стадия: stageRu(l.stage), Следующий_шаг: l.nextStep||a.nextStep},
+      before:{Подтверждённая_потребность: aiVerifiedState(l), Результат: l.outreachStatus, 'Этап работы': stageRu(l.stage), Следующий_шаг: l.nextStep||a.nextStep},
       after:{Классификация: u.response_classification, Подтверждённая_потребность: u.verified_need, Результат: u.outcome + ' — ' + OUTREACH_STATUS[u.outcome].label,
-        Коммерческий_разговор: u.relevant_commercial_conversation ? 'да' : 'нет', Стадия: stageRu(u.recommended_stage), Следующий_шаг: u.next_action,
+        Коммерческий_разговор: u.relevant_commercial_conversation ? 'да' : 'нет', 'Этап работы': stageRu(u.recommended_stage), Следующий_шаг: u.next_action,
         Коррекция_гипотез: u.hypothesis_corrections || '—'},
       patch:{status:u.outcome, clientWords:feedback, nextStep:u.next_action, stage:u.recommended_stage,
         classification:u.response_classification, relevant:u.relevant_commercial_conversation, corrections:u.hypothesis_corrections||''}});
@@ -9713,7 +9817,7 @@ function aiApplySel(action, leadId, rawJson, feedback, selectedKeys, revision){
       ai.overrides.contentGapSummary = 'Гипотеза нехватки сезонных видео снята: у клиента есть собственные сезонные видео. Другие потребности не опровергнуты.';
     if(fb.stage && fb.stage!==l.stage){
       try{ setStage(l.id, fb.stage, 'AI-мост: рекомендованная стадия по реальному ответу клиента'); }
-      catch(e){ notes.push('Стадия «'+stageRu(fb.stage)+'» не применена: ' + e.message); }
+      catch(e){ notes.push('Этап работы «'+stageRu(fb.stage)+'» не применена: ' + e.message); }
     }
   }
 
@@ -11442,7 +11546,7 @@ Object.assign(window.APP, {
    Без LLM: search → parsing → matching → confidence rules.
    Ключ поиска живёт ТОЛЬКО в Cloudflare Worker; в Lumo — только URL Worker. */
 const ENRICH_PLATFORMS = [
-  {key:'vk',        label:'VK',            hosts:['vk.com','vk.ru','vk.me'],        fact:'vk'},
+  {key:'vk',        label:'VK',            hosts:['vk.com','vk.ru'],        fact:'vk'},
   {key:'telegram',  label:'Telegram',      hosts:['t.me','telegram.me'],    fact:'telegram'},
   {key:'dzen',      label:'Дзен',          hosts:['dzen.ru'],               fact:'dzen'},
   {key:'youtube',   label:'YouTube',       hosts:['youtube.com','youtu.be'],fact:'youtube'},
@@ -11451,7 +11555,7 @@ const ENRICH_PLATFORMS = [
   {key:'instagram', label:'Instagram',     hosts:['instagram.com'],         fact:'instagram'}
 ];
 /* агрегаторы/каталоги/карты/маркетплейсы/вакансии/новости/соцсети — не официальный сайт */
-const ENRICH_SITE_BLOCKED_RE = /(reddit\.com|old\.reddit|vk\.com|vk\.ru|vk\.me|t\.me|telegram\.me|youtube\.com|youtu\.be|rutube\.ru|ok\.ru|dzen\.ru|zen\.yandex|instagram\.com|facebook\.com|fb\.com|twitter\.com|x\.com|linkedin\.com|2gis\.ru|2gis\.com|yandex\.ru|yandex\.com|maps\.google|google\.com\/maps|booking\.com|ostrovok\.ru|tutu\.ru|aviasales\.ru|tripadvisor\.|flamp\.|zoon\.|orgpage\.|list-org\.|rusprofile\.|sbis\.|kontur\.|zachestnyibiznes\.|checko\.|synaps\.|spark-interfax\.|tiu\.|pulscen\.|avito\.|ozon\.|wildberries\.|hh\.ru|superjob\.|zarplata\.|ria\.ru|tass\.ru|kommersant\.|interfax\.|rbc\.|lenta\.ru|gazeta\.ru|vc\.ru|habr\.|wikipedia\.|wikimedia\.|-wiki\.|wiki\.|otzovik\.|irecommend\.|forum\.|forums\.|\/forum|\/topics?\/|phpbb|discourse\.)/i;
+const ENRICH_SITE_BLOCKED_RE = /(reddit\.com|old\.reddit|vk\.com|vk\.ru|t\.me|telegram\.me|youtube\.com|youtu\.be|rutube\.ru|ok\.ru|dzen\.ru|zen\.yandex|instagram\.com|facebook\.com|fb\.com|twitter\.com|x\.com|linkedin\.com|2gis\.ru|2gis\.com|yandex\.ru|yandex\.com|maps\.google|google\.com\/maps|booking\.com|ostrovok\.ru|tutu\.ru|aviasales\.ru|tripadvisor\.|flamp\.|zoon\.|orgpage\.|list-org\.|rusprofile\.|sbis\.|kontur\.|zachestnyibiznes\.|checko\.|synaps\.|spark-interfax\.|tiu\.|pulscen\.|avito\.|ozon\.|wildberries\.|hh\.ru|superjob\.|zarplata\.|ria\.ru|tass\.ru|kommersant\.|interfax\.|rbc\.|lenta\.ru|gazeta\.ru|vc\.ru|habr\.|wikipedia\.|wikimedia\.|-wiki\.|wiki\.|otzovik\.|irecommend\.|forum\.|forums\.|\/forum|\/topics?\/|phpbb|discourse\.)/i;
 /* авторитетные/агрегирующие источники: подтверждают бренд, но официальным сайтом не становятся */
 const ENRICH_AUTHORITY_RE = /(2gis\.ru|flamp\.|zoon\.|tripadvisor\.|udmurt\.travel|visit-udmurtia\.|tourism\.ru|gosuslugi\.ru|gov\.ru|nalog\.ru)/i;
 const ENRICH_ERR = {
@@ -11501,22 +11605,20 @@ const ENRICH_PROVIDERS = {
       let r; try{
         r = await fetch(base+'/fetch', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url})});
       }catch(e){ throw enrichFail('helper'); }
+      if(!r.ok) throw enrichFail('fetch');
       const j = await r.json().catch(()=>null);
-      if(!r.ok){ const e = enrichFail('fetch'); e.fetchKind = (j&&j.error)||'fetch_failed'; e.fetchDetail = (j&&j.detail)||''; e.fetchStatus=(j&&j.status)||r.status; throw e; }
       if(!j || typeof j.html!=='string') throw enrichFail('fetch');
       return j;
     },
     async health(){
-      const base = this.base(); if(!base) return {ok:false, helper:false, searxng:false, kind:'helper', searchState:'UNAVAILABLE'};
+      const base = this.base(); if(!base) return {ok:false, helper:false, searxng:false, kind:'helper'};
       try{
         const r = await fetch(base+'/health', {method:'GET'});
         const j = await r.json().catch(()=>null);
         const helper = !!(r.ok && j && j.ok);
         const searxng = !!(j && j.searxng);
-        const searchState = (j&&j.search&&j.search.state) || (searxng?'AVAILABLE':'UNAVAILABLE');
-        /* Helper alone is enough for OFFICIAL-SITE-FIRST extraction; SearXNG is best-effort. */
-        return {ok: helper, helper, searxng, searchState, enginesCooldown:(j&&j.search&&j.search.engines_cooldown)||[], provider: j&&j.provider};
-      }catch(e){ return {ok:false, helper:false, searxng:false, kind:'helper', searchState:'UNAVAILABLE'}; }
+        return {ok: helper && searxng, helper, searxng, provider: j&&j.provider};
+      }catch(e){ return {ok:false, helper:false, searxng:false, kind:'helper'}; }
     }
   },
   cloudflare_worker_brave: {
@@ -11765,25 +11867,15 @@ async function enrichLead(id, mode){
   }
 
   /* ---------- VALIDATE + OFFICIAL SITE FIRST (v3.2) ---------- */
-  let siteHtml = '', siteFetch = 'none', siteFetchReason = '';
+  let siteHtml = '', siteFetch = 'none';
   const fetchWithFallback = async (url) => {
-    let u; try{ u = new URL(/^https?:/i.test(url)?url:'https://'+url); }catch(e){ siteFetchReason='bad_url'; return null; }
-    const hostBare = u.hostname.replace(/^www\./i,'');
-    const hosts = [u.hostname, u.hostname.startsWith('www.')?hostBare:'www.'+hostBare, hostBare];
-    const schemes = u.protocol==='https:' ? ['https:','http:'] : [u.protocol,'https:'];
-    const tries = [];
-    const seen = new Set();
-    for(const sc of schemes) for(const h of hosts){
-      const cand = sc+'//'+h+(u.pathname&&u.pathname!=='/'?u.pathname:'/');
-      if(!seen.has(cand)){ seen.add(cand); tries.push(cand); }
+    try{ return await SEARCH_PROVIDER.fetchPage(url); }
+    catch(e){
+      try{ const u = new URL(url);
+        const alt = u.hostname.startsWith('www.') ? u.protocol+'//'+u.hostname.slice(4) : u.protocol+'//www.'+u.hostname;
+        return await SEARCH_PROVIDER.fetchPage(alt+'/'); }
+      catch(e2){ return null; }
     }
-    let lastErr = null;
-    for(const cand of tries.slice(0,4)){
-      try{ const pg = await SEARCH_PROVIDER.fetchPage(cand); pg.requestedUrl=cand; return pg; }
-      catch(e){ lastErr=e; siteFetchReason = e.fetchKind || e.enrichKind || 'fetch_failed'; }
-    }
-    if(lastErr && lastErr.fetchDetail) siteFetchReason += ': '+lastErr.fetchDetail;
-    return null;
   };
   if(best && best.conf >= 55){
     const pg = await fetchWithFallback(best.url);
@@ -11805,33 +11897,31 @@ async function enrichLead(id, mode){
     } else { siteFetch = 'failed'; best.reasons.push('страница недоступна: не верифицирован'); }
     if(best.source==='KNOWN_CARD' && (best.conf < 55 || siteFetch==='failed') && !searchRan){
       await runSiteSearch();
-      const c2 = buildCands().filter(c=>c.conf>=70);
+      let c2 = buildCands();
+      c2 = c2.concat([knownCand]);
+      c2.sort((a,b)=>b.conf-a.conf);
       const nb = c2[0]||null;
-      /* Search engines are untrusted. Replace an existing card site only after the alternative page itself validates. */
-      if(nb && nb.url !== best.url){
-        const pgAlt = await fetchWithFallback(nb.url);
-        if(pgAlt && pgAlt.html){
-          const htmlAlt = pgAlt.html; const lowTxt = htmlAlt.toLowerCase(); let v = 0; const vr = [];
-          const brandHit = enrichTokensAll(names).some(t=>lowTxt.includes(t));
-          const cityHit = cityName && lowTxt.includes(String(cityName).toLowerCase());
-          const xcv = enrichExtractContacts(htmlAlt);
-          if(brandHit){ v += 10; vr.push('бренд упомянут на странице'); }
-          if(cityHit){ v += 8; vr.push('город упомянут на странице'); }
+      if(nb && nb !== best && nb.conf >= 55){
+        best = nb; siteHtml = ''; siteFetch = 'none';
+        const pg = await fetchWithFallback(best.url);
+        if(pg && pg.html){
+          siteHtml = pg.html; siteFetch = 'ok';
+          const lowTxt = siteHtml.toLowerCase(); let v = 0; const vr = [];
+          if(enrichTokensAll(names).some(t=>lowTxt.includes(t))){ v += 10; vr.push('бренд упомянут на странице'); }
+          if(cityName && lowTxt.includes(String(cityName).toLowerCase())){ v += 8; vr.push('город упомянут на странице'); }
+          const xcv = enrichExtractContacts(siteHtml);
           if(xcv.phones.length){ v += 6; vr.push('на странице есть телефон'); }
           if(xcv.emails.length){ v += 4; vr.push('на странице есть email'); }
-          if(brandHit && (cityHit || xcv.phones.length || xcv.emails.length)){
-            nb.conf = Math.min(100, nb.conf + v); nb.reasons = nb.reasons.concat(vr); nb.validated = true;
-            best = nb; siteHtml = htmlAlt; siteFetch = 'ok'; siteFetchReason='';
-          }
-        }
+          best.conf = Math.min(100, best.conf + v); best.reasons = best.reasons.concat(vr); best.validated = true;
+        } else { siteFetch = 'failed'; }
       }
     }
   }
 
   const E = {mode, at:new Date().toISOString(), worker:enrichWorkerUrl(), queries:0, queryLog,
-    website:null, socials:[], email:null, phone:null, evidence:[], low:[], alternatives:[], rejected:{}, siteFetch, siteFetchReason};
+    website:null, socials:[], email:null, phone:null, evidence:[], low:[], alternatives:[], rejected:{}, siteFetch};
   if(best){
-    best.sourceType = best.source==='KNOWN_CARD' ? 'KNOWN_CARD' : 'SEARCH_RESULT'; best.sourceUrl = best.url; best.signals = best.reasons.slice();
+    best.sourceType = 'SEARCH_RESULT'; best.sourceUrl = best.url; best.signals = best.reasons.slice();
     if(best.conf >= 55) E.website = {value:best.url, confidence:best.conf, source:best.source, sourceType:best.sourceType, sourceUrl:best.sourceUrl, signals:best.signals, reasons:best.reasons};
     else E.low.push({kind:'website', value:best.url, confidence:best.conf, source:best.source, reasons:best.reasons});
     cands.filter(c=>c!==best).slice(0,4).forEach(c=>E.evidence.push({kind:'website', value:c.url, confidence:c.conf, reasons:c.reasons}));
@@ -11999,24 +12089,47 @@ function enrichContactValue(l, type){
 function enrichBlockHtml(l){
   const meta = enrichMetaOf(l);
   const soc = k => (meta[k]&&meta[k].value)||'';
-  const row = (label, value, pr, href) => `<div class="row nw xs" style="gap:8px;padding:6px 0;border-bottom:1px solid var(--line-2)">
-      <span class="mut" style="width:120px;flex:none">${label}</span>
-      <span style="flex:1">${value?`${href?`<a href="${esc(href||value)}" target="_blank" rel="noopener">${esc(value)}</a>`:esc(value)}${pr?` <span class="faint">· ${esc(enrichProvLabel(pr))}</span>`:''}`:'<span class="faint">Не найдено</span>'}</span></div>`;
+  const lowOf = k => ((l.enrichment&&l.enrichment.last&&l.enrichment.last.low)||[]).find(x=>x.kind===k);
+  const st = (k, value) => {
+    if(value && meta[k] && meta[k].manual_confirmed) return '<span class="badge ok">✓ подтверждено</span>';
+    if(value) return '<span class="badge info">авто</span>';
+    if(lowOf(k)) return '<span class="badge warm">! требует проверки</span>';
+    return '<span class="badge gray">— не найдено</span>'; };
+  const row = (label, key, value, pr, href) => `<div class="row nw xs" style="gap:8px;padding:7px 0;border-bottom:1px solid var(--line-2)">
+      <span class="mut" style="width:110px;flex:none">${label}</span>
+      <span style="flex:1;min-width:0">${value?`${href?`<a href="${esc(href||value)}" target="_blank" rel="noopener">${esc(value)}</a>`:esc(value)}`:'<span class="faint">—</span>'}</span>
+      ${st(key, value)}</div>`;
   const hasLast = !!(l.enrichment && l.enrichment.last);
+  const cfg = enrichCfg();
+  const svc = cfg.status===true ? '<span class="badge ok">Локальный сервис: подключён</span>'
+    : cfg.status===false ? '<span class="badge dgr">Локальный сервис: не запущен</span>'
+    : '<span class="badge gray">Локальный сервис: не проверен</span>';
+  const sh = (l.enrichment&&l.enrichment.last&&l.enrichment.last.searchHealth)||{};
+  const src = !hasLast ? '<span class="badge gray">источники: ещё не искал</span>'
+    : sh.state==='AVAILABLE' ? '<span class="badge ok">поисковые источники: доступны</span>'
+    : sh.state==='NOT_USED' ? '<span class="badge ok">данные с официального сайта</span>'
+    : '<span class="badge warm">поисковые источники: ограничены</span>';
+  const provRows = Object.keys(meta).filter(k=>meta[k]&&meta[k].value).map(k=>
+    `<div class="xs" style="padding:3px 0"><b>${esc(k)}</b>: ${esc(meta[k].value)} · ${esc(meta[k].source||'')} · ${meta[k].confidence||0}% · ${meta[k].verified_at?fmtDateTime(meta[k].verified_at):''}</div>`).join('');
+  const lowRows = ((l.enrichment&&l.enrichment.last&&l.enrichment.last.low)||[]).map(x=>
+    `<div class="xs" style="padding:3px 0;color:var(--warm)">${esc(x.kind)}: ${esc(x.value)} · ${x.confidence}% — требует проверки</div>`).join('');
   return `<div class="card mb14"><div class="card-h"><div class="ct">${icon('globe')} Контакты и присутствие в интернете</div>
-      <span class="sp"></span>
+      <span class="sp"></span>${svc} ${src}
       ${hasLast?`<button class="btn xs" data-act="enrich-preview" data-id="${l.id}">${icon('eye')} Последний результат</button>`:''}
       <button class="btn xs" data-act="enrich-run-deep" data-id="${l.id}" title="сайт + соцсети + email + телефон">${icon('search')} Глубоко</button>
       <button class="btn xs pri" data-act="enrich-run" data-id="${l.id}">${icon('search')} ${hasLast?'Обновить данные':'Найти контакты и соцсети'}</button></div>
     <div class="card-b">
-      ${row('Сайт', l.website||'', meta.website, l.website)}
-      ${ENRICH_PLATFORMS.map(pl=>row(pl.label, soc(pl.key), meta[pl.key], soc(pl.key))).join('')}
-      ${row('Email', enrichContactValue(l,'email'), meta.email, enrichContactValue(l,'email')?'mailto:'+enrichContactValue(l,'email'):'' )}
-      ${row('Телефон', enrichContactValue(l,'phone'), meta.phone)}
-      ${l.enrichment&&l.enrichment.lastAt?`<div class="xs faint mt8">Последний поиск: ${fmtDateTime(l.enrichment.lastAt)} · запросов к API: ${l.enrichment.last.queries||'—'}</div>`:''}
+      ${row('Сайт','website', l.website||'', meta.website, l.website)}
+      ${ENRICH_PLATFORMS.map(pl=>row(pl.label, pl.key, soc(pl.key), meta[pl.key], soc(pl.key))).join('')}
+      ${row('Email','email', enrichContactValue(l,'email'), meta.email, enrichContactValue(l,'email')?'mailto:'+enrichContactValue(l,'email'):'' )}
+      ${row('Телефон','phone', enrichContactValue(l,'phone'), meta.phone)}
+      ${l.enrichment&&l.enrichment.lastAt?`<div class="xs faint mt8">Последний поиск: ${fmtDateTime(l.enrichment.lastAt)} · запросов: ${l.enrichment.last.queries||'—'}</div>`:''}
+      <details class="exp-sec"><summary>Источники и доказательства (expert)</summary><div class="exp-b">
+        ${provRows||'<div class="xs faint">Подтверждённых данных пока нет.</div>'}
+        ${lowRows?`<div class="mt8">${lowRows}</div>`:''}
+      </div></details>
     </div></div>`;
 }
-
 /* ---------- PREVIEW + selective apply ---------- */
 function enrichCurrentOf(l, key){
   if(key==='website') return l.website||'';
@@ -12056,9 +12169,11 @@ function enrichPreviewModal(id){
         <div class="xs">Проверьте кандидатов и отметьте, что записать. LOW недоступен для применения, MEDIUM требует вашего визуального подтверждения. Существующие значения не перезаписываются без галочки.</div></div>
       ${rows.join('')}
       ${(E.low||[]).length?`<div class="callout warn mt10"><div class="ct">${icon('alert')} Возможное совпадение — требуется проверка</div>${E.low.map(x=>`<div class="xs mt4">${esc(x.value)} · ${x.confidence}% · ${esc((x.reasons||[]).join(', '))} · LOW не применяется автоматически</div>`).join('')}</div>`:''}
-      ${(E.evidence||[]).length?`<div class="xs faint mt6">Отклонённые кандидаты (evidence): ${E.evidence.slice(0,4).map(x=>esc(x.value)+' ('+x.confidence+'%)').join(' · ')}</div>`:''}
-      ${Object.keys(E.rejected||{}).length?`<div class="xs faint mt6">Отклонённые альтернативы контактов: ${Object.keys(E.rejected).map(k=>esc(k)+': '+E.rejected[k].map(x=>esc(x.value)+' ('+x.confidence+'%, '+esc(x.reason)+')').join(', ')).join(' · ')}</div>`:''}
-      ${E.siteFetch==='failed'?`<div class="xs mt6" style="color:var(--warm)">Главная страница официального кандидата не загрузилась${E.siteFetchReason?' ('+esc(E.siteFetchReason)+')':''} — контакты сняты только из доступных источников.</div>`:''}
+      ${(E.evidence||[]).length || Object.keys(E.rejected||{}).length ?`<details class="exp-sec"><summary>Отклонённые кандидаты и альтернативы (expert)</summary><div class="exp-b">
+        ${(E.evidence||[]).length?`<div class="xs faint">Кандидаты сайта (evidence): ${E.evidence.slice(0,4).map(x=>esc(x.value)+' ('+x.confidence+'%)').join(' · ')}</div>`:''}
+        ${Object.keys(E.rejected||{}).length?`<div class="xs faint mt6">Альтернативы контактов: ${Object.keys(E.rejected).map(k=>esc(k)+': '+E.rejected[k].map(x=>esc(x.value)+' ('+x.confidence+'%, '+esc(x.reason)+')').join(', ')).join(' · ')}</div>`:''}
+      </div></details>`:''}
+      ${E.siteFetch==='failed'?`<div class="xs mt6" style="color:var(--warm)">Главная страница официального кандидата не загрузилась — контакты сняты только из выдачи.</div>`:''}
       ${E.searchHealth && E.searchHealth.state && E.searchHealth.state!=='AVAILABLE' && E.searchHealth.state!=='NOT_USED'?`<div class="callout warn mt10"><div class="ct">${icon('alert')} Автоматический интернет-поиск сейчас ограничен</div>
         <div class="xs">Состояние: ${esc(E.searchHealth.state)}${(E.searchHealth.unresponsive||[]).length?` · движки на паузе (cooldown): ${esc(E.searchHealth.unresponsive.join(', '))}`:''}.
         Можно повторить позже или добавить сайт вручную; остальные источники (официальный сайт, каталоги) проверяются как обычно.</div></div>`:''}
@@ -12130,9 +12245,8 @@ async function enrichTestWorker(btn){
   cfg.status = h; cfg.statusAt = new Date().toISOString();
   save(); if(btn){ btn.disabled = false; }
   render();
-  if(h.ok && h.searxng && h.searchState==='AVAILABLE') toast('Подключено: helper и интернет-поиск готовы', 'ok');
-  else if(h.ok && h.helper) toast('Helper подключён. Официальные сайты можно проверять; интернет-поиск сейчас частично ограничен.', 'warn', 5200);
-  else if(h.helper && !h.searxng) toast('Helper отвечает, но SearXNG недоступен. Проверка известных сайтов продолжает работать.', 'warn', 5200);
+  if(h.ok) toast('Подключено: локальный поиск готов', 'ok');
+  else if(h.helper && !h.searxng) toast('Helper отвечает, но SearXNG недоступен: запустите Docker-контейнер SearXNG', 'warn', 5200);
   else toast('Локальный поисковый сервис не запущен: смотрите «Как запустить» в настройках обогащения', 'warn', 5200);
 }
 function enrichHowtoModal(){
@@ -12161,8 +12275,7 @@ function enrichSettingsInject(){
   const prov = enrichProvider();
   const st = cfg.status || {};
   const status = prov.id==='local_searxng'
-    ? (st.helper && st.searxng && (!st.searchState || st.searchState==='AVAILABLE') ? ['● Подключено','ok']
-      : st.helper ? ['⚠ Helper работает · поиск ограничен','warm'] : ['○ Локальный helper не запущен','gray'])
+    ? (st.helper && st.searxng ? ['● Подключено','ok'] : st.helper ? ['⚠ SearXNG недоступен','warm'] : ['○ Локальный поиск не запущен','gray'])
     : (st.ok ? ['● Подключено','ok'] : ['○ Worker не отвечает','gray']);
   const wrap = document.createElement('div');
   wrap.innerHTML = `<div class="card mt14" id="enrich-settings-card"><div class="card-h"><div class="ct">${icon('globe')} Автоматическое обогащение</div>
@@ -12174,7 +12287,6 @@ function enrichSettingsInject(){
       <div class="xs mut mb6">Local Helper URL (Lumo → helper на MacBook → локальный SearXNG). По умолчанию http://127.0.0.1:8765</div>
       <input id="enrich-helper-url" class="inp mono xs" style="width:100%" placeholder="http://127.0.0.1:8765" value="${esc(cfg.helperUrl||'')}">`:''}
       ${cfg.workerUrl?`<div class="hintbox mt10">Legacy Cloudflare Worker (${esc(cfg.workerUrl)}) помечен deprecated: ключ Brave больше не обязателен, поиск работает локально. Переключить провайдер: <button class="btn xs" data-act="enrich-provider-legacy">Worker (deprecated)</button></div>`:''}
-      ${prov.id==='local_searxng' && st.helper?`<div class="xs mb8"><span class="mut">Helper:</span> <b>подключён</b> · <span class="mut">SearXNG:</span> <b>${st.searxng?'доступен':'недоступен'}</b>${st.searchState?` · <span class="mut">поисковые движки:</span> <b>${esc(st.searchState)}</b>`:''}</div>`:''}
       <div class="row nw mt10" style="gap:8px">
         <button class="btn xs" data-act="enrich-test-worker">${icon('plug')} Проверить подключение</button>
         <button class="btn xs" data-act="enrich-howto">${icon('doc')} Как запустить</button>

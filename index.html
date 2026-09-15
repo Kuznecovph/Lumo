@@ -7776,6 +7776,26 @@ function onAct(e){
     case 'edit-entity': e.preventDefault(); modalEntity(id); break;
     case 'adapter-headers': e.preventDefault(); modalAdapterHeaders(id); break;
     case 'footprint-paste': e.preventDefault(); modalFootprint(id||null); break;
+    case 'ai-fp-copy': case 'ai-fq-copy': { e.preventDefault();
+      const l = leadById(FP_MODAL_LEAD); const fp = l && l.aiFootprint; if(!fp) break;
+      const i = +el.getAttribute('data-i');
+      const txt = el.getAttribute('data-act')==='ai-fp-copy' ? String(((fp.items||[])[i]||{}).value||'') : String((fp.queries||[])[i]||'');
+      copyText(txt).then(ok=>toast(ok?'Скопировано':'Не удалось скопировать', ok?'ok':'warn'));
+      break; }
+    case 'ai-fp-verify': { e.preventDefault();
+      const l = leadById(FP_MODAL_LEAD); const fp = l && l.aiFootprint; if(!fp) break;
+      const it = (fp.items||[])[+el.getAttribute('data-i')];
+      if(it){ it.status='verified'; it.verifiedAt = new Date().toISOString();
+        logGlobal('lead','AI-гипотеза следа подтверждена вручную', (it.kind||'')+': '+it.value);
+        save(); modalFootprint(FP_MODAL_LEAD); toast('Гипотеза отмечена проверенной','ok'); }
+      break; }
+    case 'ai-fp-dismiss': { e.preventDefault();
+      const l = leadById(FP_MODAL_LEAD); const fp = l && l.aiFootprint; if(!fp) break;
+      const it = (fp.items||[])[+el.getAttribute('data-i')];
+      if(it){ fp.items.splice(+el.getAttribute('data-i'),1);
+        logGlobal('lead','AI-гипотеза следа снята', (it.kind||'')+': '+it.value);
+        save(); modalFootprint(FP_MODAL_LEAD); }
+      break; }
     case 'legal-check-demo': e.preventDefault(); modalLegalDemo(); break;
     case 'adapters-reset': DB.adapters = defaultAdapters(); save(); render(); toast('Все источники переведены в демо-режим','ok'); break;
     case 'adapters-test': testAdapters(); break;
@@ -8840,7 +8860,31 @@ function modalAdapterHeaders(id){
 }
 
 /* модалка: разбор цифрового следа */
+let FP_MODAL_LEAD = null;
+/* v2.7: блок AI-гипотез открытого следа внутри модалки цифрового следа */
+function aiFootprintHtml(leadId){
+  const l = leadById(leadId); const fp = l && l.aiFootprint;
+  if(!l || !fp || (!(fp.items||[]).length && !(fp.queries||[]).length)) return '';
+  const kindRu = {site:'Сайт', vk:'ВКонтакте', social:'Соцсети', lpr:'ЛПР', contact:'Контакт', other:'Прочее'};
+  const items = (fp.items||[]).map((it,i)=>`<div class="mt6" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="chip xs">${esc(kindRu[it.kind]||it.kind)}</span>
+      <span class="xs" style="flex:1;min-width:220px">${esc(it.value)}${it.rationale?` <span class="mut">· ${esc(it.rationale)}</span>`:''}
+        <span class="mut"> · ${it.source==='raw'?'из RAW':'гипотеза'} · ${esc(it.confidence||'LOW')}${it.status==='verified'?' · ПРОВЕРЕНО':' · НЕ ПРОВЕРЕНО'}</span></span>
+      <button class="btn xs" data-act="ai-fp-copy" data-i="${i}">${icon('copy')} Копировать</button>
+      ${it.status!=='verified'?`<button class="btn xs" data-act="ai-fp-verify" data-i="${i}">${icon('check')} Отметить проверенным</button>`:''}
+      <button class="btn xs" data-act="ai-fp-dismiss" data-i="${i}">${icon('x')} Снять</button>
+    </div>`).join('');
+  const qs = (fp.queries||[]).map((q,i)=>`<div class="mt6" style="display:flex;gap:8px;align-items:center">
+      <span class="xs mono" style="flex:1">${esc(q)}</span>
+      <button class="btn xs" data-act="ai-fq-copy" data-i="${i}">${icon('copy')} Копировать запрос</button>
+    </div>`).join('');
+  return `<div class="card mt14"><div class="card-h"><div class="ct">${icon('brain')} AI-гипотезы открытого следа · не проверены</div>
+      <span class="mut xs">${fp.at?fmtDateTime(fp.at):''}</span></div>
+    <div class="card-b">${items||'<div class="xs mut">Все гипотезы обработаны.</div>'}
+      ${(fp.queries||[]).length?`<div class="xs mut mt10">Запросы для ручной проверки:</div>${qs}`:''}</div></div>`;
+}
 function modalFootprint(leadId){
+  FP_MODAL_LEAD = leadId||null;
   const leads = DB.leads;
   openModal({title:'Разбор цифрового следа', sub:'HTML-код страницы или адрес сайта → контентные факты карточки', icon:'globe', size:'wide',
     body:`<div class="grid g2">
@@ -8852,6 +8896,7 @@ function modalFootprint(leadId){
         ${fieldHtml({id:'fp_age', label:'Возраст фотографий на сайте, лет (вручную)', type:'number', min:0, max:30, step:0.5})}
         ${fieldHtml({id:'fp_updated', label:'Дата последнего обновления сайта (вручную)', type:'date'})}
       </div>
+      ${aiFootprintHtml(leadId)}
       <div id="fp-out" class="mt14"></div>`,
     footer:`<div class="sp"></div><button class="btn" data-close="1">Закрыть</button>
       <button class="btn" id="fp-run-url">${icon('globe')} Загрузить по адресу</button>
@@ -9183,6 +9228,13 @@ ${JSON.stringify(feedback.trim() ? feedback : null)}
 ФОРМА JSON (пример структуры; значения — не факты и не предлагаемые изменения):
 ${JSON.stringify(sample, null, 2)}
 
+${(action==='SCOUT_AUDIT'||action==='SCOUT_RECHECK')?`ОПЦИОННО: ключи footprint_hypotheses и verify_queries — кандидаты открытого цифрового следа (сайт, ВКонтакте, соцсети, ЛПР, контакты).
+footprint_hypotheses: [{kind: site|vk|social|lpr|contact|other, value, source: raw|hypothesis, excerpt_or_rationale, confidence: LOW|MEDIUM|HIGH}].
+source:'raw' — значение ПРЯМО присутствует в блоке RAW или в ответе клиента выше (приведи цитату в excerpt_or_rationale). source:'hypothesis' — гипотеза исключительно для ручной проверки пользователем: НЕ выдумывай точные URL, адреса сообществ и контакты; если не уверен — верни вместо гипотезы поисковый запрос в verify_queries (пример: site:vk.com «НАЗВАНИЕ КОМПАНИИ» город).
+verify_queries: 3–8 готовых поисковых запросов для ручной верификации следа.
+Эти ключи не изменяют карточку: приложение сохранит их как непроверенные гипотезы в «Разбор цифрового следа».
+ПРИМЕР (значения — не факты): ${JSON.stringify({footprint_hypotheses:[{kind:'site',value:'https://example.ru',source:'raw',excerpt_or_rationale:'ссылка из вставленного HTML',confidence:'MEDIUM'},{kind:'vk',value:'site:vk.com «ПРИМЕР» город',source:'hypothesis',excerpt_or_rationale:'сообщество не подтверждено, нужна проверка',confidence:'LOW'}],verify_queries:['site:vk.com «ПРИМЕР» город','«ПРИМЕР» контакты email']}, null, 2)}`:''}
+
 Допустимые значения:
 ${JSON.stringify({stages:AI_ENUM.stages, outcomes:AI_ENUM.outcomes, need:AI_ENUM.need, readiness:AI_ENUM.readiness, confidence:AI_ENUM.confidence, risk_and_fit:AI_ENUM.levels, entry:AI_ENUM.entry, strength:AI_ENUM.strength, channels:AI_ENUM.channels, classifications:AI_ENUM.classifications, tiers:AI_ENUM.tiers}, null, 2)}
 
@@ -9195,7 +9247,23 @@ ${JSON.stringify({stages:AI_ENUM.stages, outcomes:AI_ENUM.outcomes, need:AI_ENUM
 /* ===================== ВАЛИДАЦИЯ ===================== */
 function aiFail(path, msg){ throw new Error('JSON не соответствует схеме — ' + path + ': ' + msg); }
 function aiNeedText(v, path, max){ if(typeof v!=='string') aiFail(path, 'ожидается строка'); const t=v.trim(); if(!t) aiFail(path, 'пустое значение'); if(max && t.length>max) aiFail(path, 'длиннее '+max+' символов'); return t; }
-function aiNeedEnum(v, arr, path){ if(!arr.includes(v)) aiFail(path, 'неизвестное значение «'+v+'»; допустимы: '+arr.join(', ')); return v; }
+/* v2.7.1: терпимая нормализация типовых синонимов модели: регистр + словарь синонимов.
+   Точное значение проходит как есть; синоним映射ится только если цель входит в допустимый
+   список поля; всё остальное по-прежнему отклоняется с подсказкой допустимых значений. */
+const AI_ENUM_SYN = {
+  HIGH:    ['STRONG','GOOD','HIGH_CONFIDENCE'],
+  MEDIUM:  ['STANDARD','STD','NORMAL','MID','MED','AVERAGE','MODERATE'],
+  LOW:     ['WEAK','POOR','NONE','LOW_CONFIDENCE'],
+  UNKNOWN: ['N/A','NA','NULL','NO_DATA','UNDEFINED','—','?']
+};
+function aiNeedEnum(v, arr, path){
+  let x = (typeof v==='string') ? v.trim().toUpperCase() : v;
+  if(typeof x==='string' && !arr.includes(x)){
+    for(const t of arr){ const syns = AI_ENUM_SYN[t]; if(syns && syns.includes(x)){ x = t; break; } }
+  }
+  if(!arr.includes(x)) aiFail(path, 'неизвестное значение «'+v+'»; допустимы: '+arr.join(', '));
+  return x;
+}
 function aiNeedInt(v, path, min, max){ if(typeof v!=='number' || !Number.isInteger(v)) aiFail(path, 'ожидается целое число'); if(v<min||v>max) aiFail(path, 'вне диапазона '+min+'…'+max); return v; }
 function aiNeedNumOrNull(v, path){ if(v===null) return null; if(typeof v!=='number' || !isFinite(v)) aiFail(path, 'ожидается число или null'); if(v<0) aiFail(path, 'не может быть отрицательным'); return v; }
 function aiNeedBool(v, path){ if(typeof v!=='boolean') aiFail(path, 'ожидается true/false'); return v; }
@@ -9232,7 +9300,7 @@ function aiValidateScoutUpdates(u){
   ['content_buying_signals','content_opportunity','content_gap_summary','why_this_company','trigger_event','source_summary','next_action']
     .forEach(k=>{ if(u[k]!==undefined) aiNeedText(u[k],'updates.'+k,4000); });
   if(u.why_now!==undefined){ aiStrictKeys(u.why_now,['strength','summary'],'updates.why_now');
-    aiNeedEnum(u.why_now.strength, AI_ENUM.strength, 'updates.why_now.strength'); aiNeedText(u.why_now.summary,'updates.why_now.summary',2000); }
+    u.why_now.strength = aiNeedEnum(u.why_now.strength, AI_ENUM.strength, 'updates.why_now.strength'); aiNeedText(u.why_now.summary,'updates.why_now.summary',2000); }
   ['primary_offer_code','secondary_offer_code'].forEach(k=>{ if(u[k]!==undefined && u[k]!==null) aiNeedText(u[k],'updates.'+k,100); });
   if(u.offer_evidence!==undefined){
     if(!Array.isArray(u.offer_evidence)) aiFail('updates.offer_evidence','ожидается массив');
@@ -9240,31 +9308,31 @@ function aiValidateScoutUpdates(u){
     u.offer_evidence.forEach((e,i)=>{ aiStrictKeys(e,['source','observation','business_meaning','opportunity','offer'],'updates.offer_evidence['+i+']');
       ['source','observation','business_meaning','opportunity','offer'].forEach(k=>aiNeedText(e[k],'updates.offer_evidence['+i+'].'+k,1500)); });
   }
-  if(u.offer_confidence!==undefined) aiNeedEnum(u.offer_confidence, AI_ENUM.confidence, 'updates.offer_confidence');
-  if(u.verification_confidence!==undefined) aiNeedEnum(u.verification_confidence, AI_ENUM.confidence, 'updates.verification_confidence');
-  if(u.audit_confidence!==undefined) aiNeedEnum(u.audit_confidence, AI_ENUM.confidence, 'updates.audit_confidence');
-  if(u.outreach_readiness!==undefined) aiNeedEnum(u.outreach_readiness, AI_ENUM.readiness, 'updates.outreach_readiness');
-  if(u.verified_need!==undefined) aiNeedEnum(u.verified_need, AI_ENUM.need, 'updates.verified_need');
-  if(u.offer_size_fit!==undefined) aiNeedEnum(u.offer_size_fit, AI_ENUM.levels, 'updates.offer_size_fit');
-  if(u.entry_strategy!==undefined) aiNeedEnum(u.entry_strategy, AI_ENUM.entry, 'updates.entry_strategy');
-  if(u.recurring_potential!==undefined) aiNeedEnum(u.recurring_potential, AI_ENUM.levels, 'updates.recurring_potential');
-  if(u.contactability!==undefined) aiNeedEnum(u.contactability, AI_ENUM.levels, 'updates.contactability');
-  ['counterparty_risk','payment_risk','procurement_risk','access_risk'].forEach(k=>{ if(u[k]!==undefined) aiNeedEnum(u[k], AI_ENUM.levels, 'updates.'+k); });
+  if(u.offer_confidence!==undefined) u.offer_confidence = aiNeedEnum(u.offer_confidence, AI_ENUM.confidence, 'updates.offer_confidence');
+  if(u.verification_confidence!==undefined) u.verification_confidence = aiNeedEnum(u.verification_confidence, AI_ENUM.confidence, 'updates.verification_confidence');
+  if(u.audit_confidence!==undefined) u.audit_confidence = aiNeedEnum(u.audit_confidence, AI_ENUM.confidence, 'updates.audit_confidence');
+  if(u.outreach_readiness!==undefined) u.outreach_readiness = aiNeedEnum(u.outreach_readiness, AI_ENUM.readiness, 'updates.outreach_readiness');
+  if(u.verified_need!==undefined) u.verified_need = aiNeedEnum(u.verified_need, AI_ENUM.need, 'updates.verified_need');
+  if(u.offer_size_fit!==undefined) u.offer_size_fit = aiNeedEnum(u.offer_size_fit, AI_ENUM.levels, 'updates.offer_size_fit');
+  if(u.entry_strategy!==undefined) u.entry_strategy = aiNeedEnum(u.entry_strategy, AI_ENUM.entry, 'updates.entry_strategy');
+  if(u.recurring_potential!==undefined) u.recurring_potential = aiNeedEnum(u.recurring_potential, AI_ENUM.levels, 'updates.recurring_potential');
+  if(u.contactability!==undefined) u.contactability = aiNeedEnum(u.contactability, AI_ENUM.levels, 'updates.contactability');
+  ['counterparty_risk','payment_risk','procurement_risk','access_risk'].forEach(k=>{ if(u[k]!==undefined) u[k] = aiNeedEnum(u[k], AI_ENUM.levels, 'updates.'+k); });
 }
 function aiValidateMessage(u){
   aiStrictKeys(u, ['message','channel','objective','follow_up_draft'], 'updates');
   aiNeedText(u.message,'updates.message',6000);
-  aiNeedEnum(String(u.channel||'').toUpperCase(), AI_ENUM.channels, 'updates.channel');
+  u.channel = aiNeedEnum(String(u.channel||'').toUpperCase(), AI_ENUM.channels, 'updates.channel');
   aiNeedText(u.objective,'updates.objective',500);
   if(u.follow_up_draft!==undefined && u.follow_up_draft!==null && u.follow_up_draft!=='') aiNeedText(u.follow_up_draft,'updates.follow_up_draft',6000);
 }
 function aiValidateResponse(u){
   aiStrictKeys(u, ['response_classification','verified_need','outcome','relevant_commercial_conversation','recommended_stage','next_action','hypothesis_corrections'], 'updates');
-  aiNeedEnum(u.response_classification, AI_ENUM.classifications, 'updates.response_classification');
-  aiNeedEnum(u.verified_need, AI_ENUM.need, 'updates.verified_need');
-  aiNeedEnum(u.outcome, AI_ENUM.outcomes, 'updates.outcome');
+  u.response_classification = aiNeedEnum(u.response_classification, AI_ENUM.classifications, 'updates.response_classification');
+  u.verified_need = aiNeedEnum(u.verified_need, AI_ENUM.need, 'updates.verified_need');
+  u.outcome = aiNeedEnum(u.outcome, AI_ENUM.outcomes, 'updates.outcome');
   aiNeedBool(u.relevant_commercial_conversation, 'updates.relevant_commercial_conversation');
-  aiNeedEnum(u.recommended_stage, AI_ENUM.stages, 'updates.recommended_stage');
+  u.recommended_stage = aiNeedEnum(u.recommended_stage, AI_ENUM.stages, 'updates.recommended_stage');
   aiNeedText(u.next_action,'updates.next_action',1000);
   if(u.hypothesis_corrections===undefined || u.hypothesis_corrections===null) u.hypothesis_corrections = '';
   else { if(typeof u.hypothesis_corrections!=='string') aiFail('updates.hypothesis_corrections','ожидается строка');
@@ -9281,7 +9349,7 @@ function aiValidateMeeting(u){
 function aiValidateOfferPrep(u){
   aiStrictKeys(u, ['recommended_offer_code','tier','concrete_scope','pricing_inputs','options','missing_data'], 'updates');
   if(u.recommended_offer_code!==null && u.recommended_offer_code!==undefined) aiNeedText(u.recommended_offer_code,'updates.recommended_offer_code',100);
-  if(u.tier!==null && u.tier!==undefined) aiNeedEnum(u.tier, AI_ENUM.tiers, 'updates.tier');
+  if(u.tier!==null && u.tier!==undefined) u.tier = aiNeedEnum(u.tier, AI_ENUM.tiers, 'updates.tier');
   aiNeedStrArr(u.concrete_scope,'updates.concrete_scope',1,50);
   aiStrictKeys(u.pricing_inputs||{}, ['alexander_work','fixed_contractors','variable_post','other_direct_costs','logistics'], 'updates.pricing_inputs');
   ['alexander_work','fixed_contractors','variable_post','other_direct_costs','logistics'].forEach(k=>aiNeedNumOrNull((u.pricing_inputs||{})[k], 'updates.pricing_inputs.'+k));
@@ -9329,7 +9397,7 @@ function aiParseRaw(raw, action, leadId, feedback){
   catch(e){ throw new Error('Невалидный JSON. Вставьте только JSON от модели — без Markdown-оформления, комментариев и пояснений.'); }
   if(!v || typeof v!=='object' || Array.isArray(v)) throw new Error('Ожидается JSON-объект с ключами schema_version, action, lead_id, updates, notes, warnings');
   if(v.schema_version!=='1.0') throw new Error('schema_version должен быть "1.0" (получено: '+JSON.stringify(v.schema_version)+')');
-  aiStrictKeys(v, ['schema_version','action','lead_id','company_id','updates','notes','warnings'], 'корень JSON');
+  aiStrictKeys(v, ['schema_version','action','lead_id','company_id','updates','notes','warnings','footprint_hypotheses','verify_queries'], 'корень JSON');
   if(v.action!==action) throw new Error('Действие в JSON («'+v.action+'») не совпадает с выбранным шаблоном («'+action+'»)');
   const lid = v.lead_id!==undefined ? v.lead_id : v.company_id;
   if(lid!==l.id) throw new Error('JSON относится к другой карточке (lead_id «'+lid+'»). Скопируйте точный идентификатор из промпта.');
@@ -9384,7 +9452,31 @@ function aiParseRaw(raw, action, leadId, feedback){
   if(action==='OFFER_PREP' && u.recommended_offer_code && !aiResolveOffer(u.recommended_offer_code))
     throw new Error('Рекомендованный код продукта отсутствует в каталоге: '+u.recommended_offer_code);
 
-  return {schema_version:'1.0', action, lead_id:l.id, updates:u, notes:v.notes||[], warnings:v.warnings||[]};
+  return {schema_version:'1.0', action, lead_id:l.id, updates:u, notes:v.notes||[], warnings:v.warnings||[], footprint:aiParseFootprint(v, action)};
+}
+/* v2.7: AI-гипотезы открытого следа. Канон: след не выдумывается — значения допускаются
+   только из RAW (source:'raw') или как непроверенные гипотезы (source:'hypothesis');
+   карточку они не изменяют, живут отдельно в lead.aiFootprint со статусом unverified. */
+function aiParseFootprint(v, action){
+  if(action!=='SCOUT_AUDIT' && action!=='SCOUT_RECHECK') return null;
+  const items = [], seen = new Set();
+  (Array.isArray(v.footprint_hypotheses) ? v.footprint_hypotheses : []).slice(0,20).forEach((it,i)=>{
+    if(!it || typeof it!=='object' || Array.isArray(it)) return;
+    const kind = ['site','vk','social','lpr','contact','other'].includes(it.kind) ? it.kind : 'other';
+    let value; try{ value = aiNeedText(it.value, 'footprint_hypotheses['+i+'].value', 200); }catch(err){ return; }
+    const source = it.source==='raw' ? 'raw' : 'hypothesis';
+    const confidence = ['LOW','MEDIUM','HIGH'].includes(it.confidence) ? it.confidence : 'LOW';
+    let rationale = ''; try{ rationale = aiNeedText(it.excerpt_or_rationale, 'footprint_hypotheses['+i+'].excerpt_or_rationale', 300); }catch(err){ rationale=''; }
+    const key = kind+'|'+value.toLowerCase();
+    if(seen.has(key)) return; seen.add(key);
+    items.push({kind, value, source, confidence, rationale});
+  });
+  const queries = [];
+  (Array.isArray(v.verify_queries) ? v.verify_queries : []).slice(0,8).forEach((q,i)=>{
+    try{ queries.push(aiNeedText(q, 'verify_queries['+i+']', 200)); }catch(err){}
+  });
+  if(!items.length && !queries.length) return null;
+  return {items, queries};
 }
 
 /* ===================== PREVIEW ===================== */
@@ -9490,6 +9582,23 @@ function aiApplySel(action, leadId, rawJson, feedback, selectedKeys, revision){
   if(new Set(keys).size!==keys.length || keys.some(k=>!pv.rows.some(r=>r.key===k))) throw new Error('Неизвестные или повторяющиеся поля применения');
   const rows = pv.rows.filter(r=>keys.includes(r.key));
   const ai = aiState(l), notes = [], u = pv.parsed.updates;
+
+  /* 0) v2.7: AI-гипотезы открытого следа — сохраняются непроверенными, канон не нарушается */
+  if((action==='SCOUT_AUDIT'||action==='SCOUT_RECHECK') && pv.parsed.footprint){
+    const fp = pv.parsed.footprint;
+    const prev = l.aiFootprint || {items:[], queries:[], at:null, action:null};
+    prev.items = prev.items||[]; prev.queries = prev.queries||[];
+    const have = new Set(prev.items.map(i=>i.kind+'|'+String(i.value).toLowerCase()));
+    let added = 0;
+    fp.items.forEach(it=>{ const k = it.kind+'|'+it.value.toLowerCase();
+      if(have.has(k)) return; have.add(k); added++;
+      prev.items.push(Object.assign({status:'unverified', at:new Date().toISOString()}, it)); });
+    const hq = new Set(prev.queries); (fp.queries||[]).forEach(q=>hq.add(q));
+    prev.queries = Array.from(hq).slice(0,24);
+    prev.at = new Date().toISOString(); prev.action = action;
+    l.aiFootprint = prev;
+    if(added || (fp.queries||[]).length) notes.push('AI-гипотезы следа: новых '+added+', запросов на проверку: '+(fp.queries||[]).length+' → «Разбор цифрового следа»');
+  }
 
   /* 1) справочный слой AI */
   const adv = {}; rows.filter(r=>r.target==='advisory').forEach(r=>Object.assign(adv, r.patch));

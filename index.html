@@ -10368,32 +10368,30 @@ function okvedToIndustry(code){
 
 /* Поисковые слова и профильные ОКВЭД для реального поиска по отраслям */
 const INDUSTRY_DADATA = {
-  manufacturing:{queries:['производство','завод','промышленное предприятие','механический'], okved:['13','14','15','16','17','18','20','22','23','24','25','26','27','28','29','30','32','33']},
-  food:         {queries:['пищевое производство','молоко','мясо','хлеб','кондитерская'], okved:['10','11','12']},
-  furniture:    {queries:['мебель','мебельная фабрика','мебельное производство'], okved:['31']},
-  construction: {queries:['строительство','строительная компания','ремонт зданий'], okved:['41','42','43']},
-  hospitality:  {queries:['гостиница','отель','база отдыха','санаторий','турбаза','загородный клуб'], okved:['55']},
-  tourism:      {queries:['туризм','экскурсии','туроператор','глэмпинг','активный отдых'], okved:['79','93']},
-  agriculture:  {queries:['сельское хозяйство','агро','фермерское хозяйство','птицефабрика','животноводство'], okved:['01','02','03']},
-  energy:       {queries:['энергетика','электросети','теплоснабжение','нефть','газ'], okved:['35','19','06']},
-  logistics:    {queries:['транспортная компания','перевозки','логистика','склад'], okved:['49','50','51','52','53']},
-  it:           {queries:['программное обеспечение','информационные технологии','веб-студия'], okved:['62','63','58.2']},
-  retail:       {queries:['торговый дом','торговая компания','оптовая торговля'], okved:['46','47']},
-  medical:      {queries:['медицинский центр','клиника','стоматология'], okved:['86','87']},
-  education:    {queries:['образовательный центр','школа','детский центр','колледж'], okved:['85']},
-  services:     {queries:['услуги','сервисный центр','ателье'], okved:['69','70','71','73','74','78','81','82','95','96']},
-  public:       {queries:['муниципальное учреждение','бюджетное учреждение','администрация'], okved:['84','88']},
-  metallurgy:   {queries:['металлургия','металлообработка','металлоконструкции','литейное производство','металлургический завод'], okved:['24','25']},
-  machinery:    {queries:['машиностроение','механический завод','производство оборудования','станкостроение','приборостроение'], okved:['26','27','28','29','30','33']},
-  chemical:     {queries:['химическое производство','химический завод','полимеры','пластмассы','лакокрасочные материалы'], okved:['20','22']},
-  oilgas:       {queries:['нефть','газ','нефтегазовая компания','добыча','нефтесервис','горнодобывающее'], okved:['05','06','07','08','09','19']},
-  textile:      {queries:['текстиль','швейное производство','одежда','обувь','трикотажная фабрика'], okved:['13','14','15']},
-  wood:         {queries:['деревообработка','лесозаготовка','пиломатериалы','фанера','лесная компания','деревообрабатывающий'], okved:['02','16','17']},
-  auto:         {queries:['автосервис','автоцентр','дилерский центр','автозапчасти','автомойка'], okved:['45']},
-  realestate:   {queries:['недвижимость','девелопмент','строительство жилья','управляющая компания','агентство недвижимости'], okved:['68']},
-  finance:      {queries:['банк','страховая компания','финансы','кредитный кооператив','лизинг'], okved:['64','65','66']},
-  horeca:       {queries:['ресторан','кафе','столовая','кейтеринг','доставка еды','кофейня'], okved:['56']},
-  media:        {queries:['рекламное агентство','медиа','издательство','полиграфия','телеканал','продакшн'], okved:['18','59','60','73','90']}
+  manufacturing:{queries:['производ','завод','механич','пром','техно','инструмент'], okved:['25.1','25.2','25.3','25.6','25.7','25.9','28.1','28.2','28.3','28.4']},
+  food:         {queries:['пищ','молоко','мясо','хлеб','кондитер','комбинат'], okved:['10.1','10.2','10.3','10.4','10.5','10.6','10.7','10.8','11.0']},
+  furniture:    {queries:['мебел','диван','матрас','шкаф','фабрик','каркас'], okved:['31.0']},
+  construction: {queries:['строит','монтаж','ремонт','девелоп','подряд','отдел'], okved:['41.1','41.2','42.1','42.2','42.9','43.1','43.2','43.3','43.9']},
+  hospitality:  {queries:['гостин','отел','санатор','база отдых','турбаз','загород'], okved:['55.1','55.2','55.3','55.9']},
+  tourism:      {queries:['тур','экскурс','путешеств','отдых','глэмп','сплав'], okved:['79.1','79.9','93.1','93.2']},
+  agriculture:  {queries:['агро','ферм','птиц','животнов','теплич','зерно'], okved:['01.1','01.2','01.3','01.4','01.5','01.6','03.1']},
+  energy:       {queries:['энерг','электр','тепл','сетев','генер'], okved:['35.1','35.2','35.3']},
+  logistics:    {queries:['транс','логистик','перевоз','груз','экспед','склад'], okved:['49.1','49.2','49.3','49.4','50.1','51.1','51.2','52.1','52.2','53.1']},
+  it:           {queries:['информаци','технолог','програм','софт','веб','интернет'], okved:['58.2','62.0','63.1','63.9']},
+  retail:       {queries:['торг','опт','розниц','магазин','снаб','сбыт'], okved:['46.1','46.2','46.3','46.4','46.6','46.7','46.9','47.1','47.2','47.5']},
+  medical:      {queries:['мед','клиник','стоматолог','врач','здрав','фарм'], okved:['86.1','86.2','86.9','87.1','87.2','87.3','87.9']},
+  education:    {queries:['образов','школ','детск','учеб','колледж','курс'], okved:['85.1','85.2','85.3','85.4']},
+  services:     {queries:['сервис','услуг','агентств','консалт','клининг','охран'], okved:['69.1','70.2','71.1','71.2','73.1','74.1','78.1','81.2','82.9','96.0']},
+  public:       {queries:['администрац','учрежден','муниципал','бюджет','ведомств'], okved:['84.1','84.2','84.3','88.1','88.9']},
+  metallurgy:   {queries:['металл','литей','кузн','прокат','сплав','метиз'], okved:['24.1','24.2','24.3','24.4','24.5']},
+  machinery:    {queries:['машино','механич','станко','приборо','оборудов','завод'], okved:['26.1','26.5','27.1','27.9','28.1','28.2','28.4','28.9','29.1','30.1']},
+  chemical:     {queries:['хим','полимер','пластмасс','лако','краск','резин'], okved:['20.1','20.2','20.3','20.4','20.5','20.6','22.1','22.2']},
+  wood:         {queries:['лес','дерев','пил','фанер','брус','мебел'], okved:['02.1','02.2','16.1','16.2','17.1','17.2']},
+  auto:         {queries:['авто','автосервис','автоцентр','запчаст','мойк','шин'], okved:['45.1','45.2','45.3','45.4']},
+  realestate:   {queries:['недвижим','управляющ','девелоп','аренд','риэлт','жиль'], okved:['68.1','68.2','68.3']},
+  finance:      {queries:['банк','страхов','финанс','лизинг','кредит','инвест'], okved:['64.1','64.2','64.9','65.1','65.2','66.1']},
+  horeca:       {queries:['ресторан','кафе','столов','кофей','кейтеринг','пицц'], okved:['56.1','56.2','56.3']},
+  media:        {queries:['реклам','медиа','издатель','полиграф','продакшн','студи'], okved:['18.1','18.2','59.1','59.2','60.1','60.2','73.1','90.0']}
 };
 
 /* ---------- конфигурация (живёт в адаптере источника «registry») ---------- */
@@ -10640,40 +10638,26 @@ function dadataSearchTerms(opts){
   const custom = String(o.query||'').trim();
   if(custom) return [custom];
   const ind = INDUSTRY_DADATA[o.industry] || INDUSTRY_DADATA.services;
-  return ind.queries.slice(0, 4);
+  return ind.queries.slice(0, 6);
 }
 function dadataSearchPlan(opts){
+  /* v2.6.2 (по замерам на живом API): DaData Suggestions — ввод с подсказками, а не каталог:
+     пустой query с фильтрами возвращает 0. Отраслевой поиск = префиксные основы в названии
+     (частичное совпадение) + серверный фильтр по групповым кодам ОКВЭД (формат «XX.Y») + регион. */
   const o = opts||{};
   const terms = dadataSearchTerms(o);
   const regions = dadataRegionsOf(o);
   const cities = (o.cities && o.cities.length) ? o.cities.slice(0, MAX_DADATA_STEPS) : [];
-  const meta = {regions, groups:1, truncated:false, mode:'regions', pureSteps:0};
+  const meta = {regions, groups:1, truncated:false, mode:'regions'};
   const plan = [];
-  /* v2.6.1: ОКВЭД-выборка — запрос с пустой строкой и фильтром по кодам ОКВЭД отрасли
-     возвращает реальную выборку компаний отрасли из ЕГРЮЛ, а не только компании
-     со словами-ключами в названии. Ключевые слова остаются дополнением. */
-  const pure = !!o.okvedFilter;
   if(cities.length){
     /* городской режим: запрос с названием города, КЛАДР-фильтр — регион этого города */
     meta.mode = 'cities';
-    if(pure){
-      for(const ck of cities){
-        const rid = regionOfCity(ck);
-        const loc = (REGION_KLADR[rid]||[]).slice(0, DADATA_LOC_LIMIT);
-        plan.push({query:'', cityKey: ck, regionId: rid, locations: loc, pure:true});
-        meta.pureSteps++;
-        if(plan.length >= MAX_DADATA_STEPS){ meta.truncated = true; break; }
-      }
-    }
-    const budget = MAX_DADATA_STEPS - plan.length;
-    let used = 0;
     for(const ck of cities){
       const rid = regionOfCity(ck);
       const loc = (REGION_KLADR[rid]||[]).slice(0, DADATA_LOC_LIMIT);
       for(const t of terms){
-        if(used >= budget){ meta.truncated = true; break; }
         plan.push({query: cityOf(ck).name + ' ' + t, cityKey: ck, regionId: rid, locations: loc});
-        used++;
         if(plan.length >= MAX_DADATA_STEPS){ meta.truncated = true; break; }
       }
       if(meta.truncated) break;
@@ -10681,24 +10665,16 @@ function dadataSearchPlan(opts){
   } else {
     const groups = dadataRegionGroups(regions);
     meta.groups = groups.length;
-    if(pure){
-      for(const g of groups){
-        plan.push({query:'', regionId:g.regions[0], regions:g.regions.slice(), locations:g.kladr.slice(), pure:true});
-        meta.pureSteps++;
-        if(plan.length >= MAX_DADATA_STEPS){ meta.truncated = true; break; }
-      }
-    }
-    const budget = MAX_DADATA_STEPS - plan.length;
     let useTerms = terms;
-    if(groups.length * terms.length > budget){
-      useTerms = terms.slice(0, Math.max(1, Math.floor(budget / Math.max(1, groups.length))));
-      meta.truncated = meta.truncated || useTerms.length < terms.length;
+    if(groups.length * terms.length > MAX_DADATA_STEPS){
+      useTerms = terms.slice(0, Math.max(1, Math.floor(MAX_DADATA_STEPS / groups.length)));
+      meta.truncated = useTerms.length < terms.length;
     }
     let budgetHit = false;
     for(const g of groups){
       for(const t of useTerms){
-        if(plan.length >= MAX_DADATA_STEPS){ meta.truncated = true; budgetHit = true; break; }
         plan.push({query:t, regionId:g.regions[0], regions:g.regions.slice(), locations:g.kladr.slice()});
+        if(plan.length >= MAX_DADATA_STEPS){ meta.truncated = true; budgetHit = true; break; }
       }
       if(budgetHit) break;
     }
@@ -10713,23 +10689,11 @@ async function runDadataSearch(opts){
   const plan = dadataSearchPlan(o);
   const okved = o.okvedFilter ? (INDUSTRY_DADATA[o.industry]||{}).okved : null;
   const items = []; const errors = []; let requests = 0;
-  let pureBroken = false;
   for(const step of plan){
-    const params = {query:step.query, count:20, status:o.status, branch_type:o.branch_type,
-      type:o.type||undefined, okved:okved||undefined, locations:(step.locations||[]).map(k=>({kladr_id:k}))};
-    let r = await dadataSuggest(params);
+    const r = await dadataSuggest({query:step.query, count:20, status:o.status, branch_type:o.branch_type,
+      type:o.type||undefined, okved:okved||undefined, locations:(step.locations||[]).map(k=>({kladr_id:k}))});
     requests++;
-    /* v2.6.1: если DaData не принял пустой запрос — повторяем ОКВЭД-выборку с родовым словом */
-    if(step.pure && !r.ok && !pureBroken){
-      const fb = String(o.type||'')==='INDIVIDUAL' ? 'ИП' : 'ООО';
-      const r2 = await dadataSuggest(Object.assign({}, params, {query:fb}));
-      requests++;
-      if(r2.ok){ step.query = fb; r = r2; } else { pureBroken = true; }
-    }
-    if(!r.ok){
-      if(step.pure){ pureBroken = true; continue; }
-      errors.push(`«${step.query}»: ${r.error}${r.hint?' — '+r.hint:''}`); continue;
-    }
+    if(!r.ok){ errors.push(`«${step.query}»: ${r.error}${r.hint?' — '+r.hint:''}`); continue; }
     (r.data.suggestions||[]).forEach(sug => items.push(dadataSuggestionToCandidate(sug, {region:step.regionId, query:step.query})));
   }
   if(!items.length && errors.length) return {ok:false, error:errors.join('\n'), hint:'Ни одного результата. Проверьте ключ/лимит или попробуйте другие слова; доступен ручной режим «Вставить JSON».'};
@@ -10743,7 +10707,7 @@ async function runDadataSearch(opts){
     || ((b.employees||-1)-(a.employees||-1))
     || String(a.name).localeCompare(String(b.name),'ru'));
   cands = cands.slice(0, clamp(o.count||20, 1, 60));
-  const qText = `${o.query ? '«'+o.query+'»' : IND(o.industry||'services').label} · ${ddRegionsLabel(o.regions)}${o.okvedFilter?((plan.meta&&plan.meta.pureSteps)?' · ОКВЭД-выборка из реестра':' · фильтр по ОКВЭД'):''}`;
+  const qText = `${o.query ? '«'+o.query+'»' : IND(o.industry||'services').label} · ${ddRegionsLabel(o.regions)}${o.okvedFilter?' · фильтр по групповым кодам ОКВЭД отрасли':''}`;
   return {ok:true, items:cands, query:qText, requests, used:dadataUsed().count, errors, regions:o.regions, planMeta:plan.meta||null};
 }
 /* запуск из интерфейса Discovery */
@@ -11028,7 +10992,7 @@ function dadataSearchCardHtml(){
           ${ddRegionsBoxHtml(d)}
         </div>
         <div style="grid-column:1/-1" class="row">
-          <label class="chk ${d.okved?'on':''}"><input type="checkbox" id="dd_okved" ${d.okved?'checked':''}> отраслевая выборка по ОКВЭД (реестр, а не только слова в названии) ${infoIco('ENRICH','')}</label>
+          <label class="chk ${d.okved?'on':''}"><input type="checkbox" id="dd_okved" ${d.okved?'checked':''}> фильтр по ОКВЭД отрасли (групповые коды, формат XX.Y) ${infoIco('ENRICH','')}</label>
           <label class="chk ${d.autoProject?'on':''}"><input type="checkbox" id="dd_autoProject" ${d.autoProject?'checked':''}> создать проект поиска из запроса</label>
           <span class="xs muted" id="dd_cities_row" style="flex:1">${ddCitiesRowHtml(d)}</span>
         </div>

@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -10646,16 +10647,33 @@ function dadataSearchPlan(opts){
   const terms = dadataSearchTerms(o);
   const regions = dadataRegionsOf(o);
   const cities = (o.cities && o.cities.length) ? o.cities.slice(0, MAX_DADATA_STEPS) : [];
-  const meta = {regions, groups:1, truncated:false, mode:'regions'};
+  const meta = {regions, groups:1, truncated:false, mode:'regions', pureSteps:0};
   const plan = [];
+  /* v2.6.1: ОКВЭД-выборка — запрос с пустой строкой и фильтром по кодам ОКВЭД отрасли
+     возвращает реальную выборку компаний отрасли из ЕГРЮЛ, а не только компании
+     со словами-ключами в названии. Ключевые слова остаются дополнением. */
+  const pure = !!o.okvedFilter;
   if(cities.length){
     /* городской режим: запрос с названием города, КЛАДР-фильтр — регион этого города */
     meta.mode = 'cities';
+    if(pure){
+      for(const ck of cities){
+        const rid = regionOfCity(ck);
+        const loc = (REGION_KLADR[rid]||[]).slice(0, DADATA_LOC_LIMIT);
+        plan.push({query:'', cityKey: ck, regionId: rid, locations: loc, pure:true});
+        meta.pureSteps++;
+        if(plan.length >= MAX_DADATA_STEPS){ meta.truncated = true; break; }
+      }
+    }
+    const budget = MAX_DADATA_STEPS - plan.length;
+    let used = 0;
     for(const ck of cities){
       const rid = regionOfCity(ck);
       const loc = (REGION_KLADR[rid]||[]).slice(0, DADATA_LOC_LIMIT);
       for(const t of terms){
+        if(used >= budget){ meta.truncated = true; break; }
         plan.push({query: cityOf(ck).name + ' ' + t, cityKey: ck, regionId: rid, locations: loc});
+        used++;
         if(plan.length >= MAX_DADATA_STEPS){ meta.truncated = true; break; }
       }
       if(meta.truncated) break;
@@ -10663,16 +10681,24 @@ function dadataSearchPlan(opts){
   } else {
     const groups = dadataRegionGroups(regions);
     meta.groups = groups.length;
+    if(pure){
+      for(const g of groups){
+        plan.push({query:'', regionId:g.regions[0], regions:g.regions.slice(), locations:g.kladr.slice(), pure:true});
+        meta.pureSteps++;
+        if(plan.length >= MAX_DADATA_STEPS){ meta.truncated = true; break; }
+      }
+    }
+    const budget = MAX_DADATA_STEPS - plan.length;
     let useTerms = terms;
-    if(groups.length * terms.length > MAX_DADATA_STEPS){
-      useTerms = terms.slice(0, Math.max(1, Math.floor(MAX_DADATA_STEPS / groups.length)));
-      meta.truncated = useTerms.length < terms.length;
+    if(groups.length * terms.length > budget){
+      useTerms = terms.slice(0, Math.max(1, Math.floor(budget / Math.max(1, groups.length))));
+      meta.truncated = meta.truncated || useTerms.length < terms.length;
     }
     let budgetHit = false;
     for(const g of groups){
       for(const t of useTerms){
-        plan.push({query:t, regionId:g.regions[0], regions:g.regions.slice(), locations:g.kladr.slice()});
         if(plan.length >= MAX_DADATA_STEPS){ meta.truncated = true; budgetHit = true; break; }
+        plan.push({query:t, regionId:g.regions[0], regions:g.regions.slice(), locations:g.kladr.slice()});
       }
       if(budgetHit) break;
     }
@@ -10687,11 +10713,23 @@ async function runDadataSearch(opts){
   const plan = dadataSearchPlan(o);
   const okved = o.okvedFilter ? (INDUSTRY_DADATA[o.industry]||{}).okved : null;
   const items = []; const errors = []; let requests = 0;
+  let pureBroken = false;
   for(const step of plan){
-    const r = await dadataSuggest({query:step.query, count:20, status:o.status, branch_type:o.branch_type,
-      type:o.type||undefined, okved:okved||undefined, locations:(step.locations||[]).map(k=>({kladr_id:k}))});
+    const params = {query:step.query, count:20, status:o.status, branch_type:o.branch_type,
+      type:o.type||undefined, okved:okved||undefined, locations:(step.locations||[]).map(k=>({kladr_id:k}))};
+    let r = await dadataSuggest(params);
     requests++;
-    if(!r.ok){ errors.push(`«${step.query}»: ${r.error}${r.hint?' — '+r.hint:''}`); continue; }
+    /* v2.6.1: если DaData не принял пустой запрос — повторяем ОКВЭД-выборку с родовым словом */
+    if(step.pure && !r.ok && !pureBroken){
+      const fb = String(o.type||'')==='INDIVIDUAL' ? 'ИП' : 'ООО';
+      const r2 = await dadataSuggest(Object.assign({}, params, {query:fb}));
+      requests++;
+      if(r2.ok){ step.query = fb; r = r2; } else { pureBroken = true; }
+    }
+    if(!r.ok){
+      if(step.pure){ pureBroken = true; continue; }
+      errors.push(`«${step.query}»: ${r.error}${r.hint?' — '+r.hint:''}`); continue;
+    }
     (r.data.suggestions||[]).forEach(sug => items.push(dadataSuggestionToCandidate(sug, {region:step.regionId, query:step.query})));
   }
   if(!items.length && errors.length) return {ok:false, error:errors.join('\n'), hint:'Ни одного результата. Проверьте ключ/лимит или попробуйте другие слова; доступен ручной режим «Вставить JSON».'};
@@ -10705,7 +10743,7 @@ async function runDadataSearch(opts){
     || ((b.employees||-1)-(a.employees||-1))
     || String(a.name).localeCompare(String(b.name),'ru'));
   cands = cands.slice(0, clamp(o.count||20, 1, 60));
-  const qText = `${o.query ? '«'+o.query+'»' : IND(o.industry||'services').label} · ${ddRegionsLabel(o.regions)}${o.okvedFilter?' · фильтр по ОКВЭД':''}`;
+  const qText = `${o.query ? '«'+o.query+'»' : IND(o.industry||'services').label} · ${ddRegionsLabel(o.regions)}${o.okvedFilter?((plan.meta&&plan.meta.pureSteps)?' · ОКВЭД-выборка из реестра':' · фильтр по ОКВЭД'):''}`;
   return {ok:true, items:cands, query:qText, requests, used:dadataUsed().count, errors, regions:o.regions, planMeta:plan.meta||null};
 }
 /* запуск из интерфейса Discovery */
@@ -10990,7 +11028,7 @@ function dadataSearchCardHtml(){
           ${ddRegionsBoxHtml(d)}
         </div>
         <div style="grid-column:1/-1" class="row">
-          <label class="chk ${d.okved?'on':''}"><input type="checkbox" id="dd_okved" ${d.okved?'checked':''}> только профильные ОКВЭД отрасли ${infoIco('ENRICH','')}</label>
+          <label class="chk ${d.okved?'on':''}"><input type="checkbox" id="dd_okved" ${d.okved?'checked':''}> отраслевая выборка по ОКВЭД (реестр, а не только слова в названии) ${infoIco('ENRICH','')}</label>
           <label class="chk ${d.autoProject?'on':''}"><input type="checkbox" id="dd_autoProject" ${d.autoProject?'checked':''}> создать проект поиска из запроса</label>
           <span class="xs muted" id="dd_cities_row" style="flex:1">${ddCitiesRowHtml(d)}</span>
         </div>

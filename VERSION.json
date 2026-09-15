@@ -1,6 +1,6 @@
 {
   "product": "Lumo — AI-КЛИЕНТ-СКАУТ",
-  "version": "2.6",
+  "version": "2.6.1",
   "track": "html_single_file",
   "target": "GitHub Pages (статический хостинг, автодеплой через GitHub Actions)",
   "built_at": "2026-09-13",
@@ -18,7 +18,9 @@
   "changes_vs_netlify_pack": [
     "netlify.toml удалён (не поддерживается GitHub Pages)",
     "404.html: редирект адаптирован под подпапку username.github.io/repo/",
-    "добавлены .nojekyll, .github/workflows/deploy.yml, README.md"
+    "добавлены .nojekyll, .github/workflows/deploy.yml, README.md",
+    "v2.6.1: отраслевой поиск DaData — ОКВЭД-выборка из реестра (запрос с пустой строкой + фильтр по кодам ОКВЭД отрасли + регион) до keyword-шагов; фолбэк «ООО»/«ИП», если пустой запрос отклонён; при недоступности выборки поиск молча работает по старой схеме",
+    "v2.6.1: метка результата «ОКВЭД-выборка из реестра»; обновлён текст чекбокса ОКВЭД"
   ],
   "files": {
     "404.html": {
@@ -26,8 +28,8 @@
       "sha256": "b36d3b2ac994195b4fea8d2703b36497ccaac38867e4312afb0662a740491224"
     },
     "index.html": {
-      "size": 1156471,
-      "sha256": "0c7addf306ffa6468ae58e87160d9da432405be974ee50b4aa23cd1dfadef330"
+      "size": 1158494,
+      "sha256": "569f4692f1b6c5d52e9447ded7e0c5cb4edde88d1fd2038c9bdfc723ad9557d0"
     },
     "robots.txt": {
       "size": 268,

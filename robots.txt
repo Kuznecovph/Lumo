@@ -1,4 +1,0 @@
-# Lumo — AI-КЛИЕНТ-СКАУТ: приватный рабочий инструмент, индексация запрещена.
-# Дополнительно в index.html указан <meta name="robots" content="noindex, nofollow">.
-User-agent: *
-Disallow: /

@@ -1,0 +1,47 @@
+{
+  "product": "Lumo — AI-КЛИЕНТ-СКАУТ",
+  "version": "3.0.0",
+  "track": "html_single_file",
+  "target": "GitHub Pages (статический хостинг, автодеплой через GitHub Actions)",
+  "built_at": "2026-09-13",
+  "packaged_at": "2026-09-15",
+  "tests": "72/72 (node --max-old-space-size=896 test.js, jsdom)",
+  "privacy": {
+    "robots_txt": "Disallow: /",
+    "meta_robots": "noindex, nofollow",
+    "real_leads": "встроены в index.html (решение пользователя: оставить как есть); публичный репозиторий = исходник виден всем",
+    "note": "на GitHub Pages кастомные HTTP-заголовки недоступны (netlify.toml удалён)"
+  },
+  "external_api": [
+    "https://suggestions.dadata.ru — CORS: *, ключ вводится пользователем, хранится в localStorage"
+  ],
+  "changes_vs_netlify_pack": [
+    "netlify.toml удалён (не поддерживается GitHub Pages)",
+    "404.html: редирект адаптирован под подпапку username.github.io/repo/",
+    "добавлены .nojekyll, .github/workflows/deploy.yml, README.md",
+    "v2.6.1: отраслевой поиск DaData — ОКВЭД-выборка из реестра (запрос с пустой строкой + фильтр по кодам ОКВЭД отрасли + регион) до keyword-шагов; фолбэк «ООО»/«ИП», если пустой запрос отклонён; при недоступности выборки поиск молча работает по старой схеме",
+    "v2.6.1: метка результата «ОКВЭД-выборка из реестра»; обновлён текст чекбокса ОКВЭД",
+    "v2.6.2 (по замерам на живом API): фильтр okved переведён на групповые коды формата XX.Y (двузначные коды отраслей возвращали 0 результатов); слова-ключи заменены префиксными основами (частичное совпадение DaData ловит брендовые названия); 6 ключей за запуск вместо 4; удалена мёртвая «ОКВЭД-выборка» пустым запросом (DaData Suggestions — не каталог: пустой query с фильтрами возвращает 0)",
+    "v2.7.0: AI-гипотезы открытого следа — SCOUT_AUDIT/SCOUT_RECHECK принимают ключи footprint_hypotheses (сайт/ВК/соцсети/ЛПР/контакты: только из RAW или как непроверенные гипотезы) и verify_queries (поисковые запросы для ручной верификации); хранятся в lead.aiFootprint со статусом unverified; блок с кнопками Копировать/Отметить проверенным/Снять — в модалке «Разбор цифрового следа». Канон «след не выдумывается» сохранён: гипотезы не изменяют карточку и не считаются фактами",
+    "v2.7.1: терпимая нормализация enum-значений от модели: регистр и типовые синонимы (STANDARD/NORMAL/MID/AVERAGE→MEDIUM, STRONG→HIGH, WEAK/NONE→LOW, N/A/NULL→UNKNOWN) приводятся к шкале поля до проверки; нормализованное значение пишется обратно в updates; неизвестные значения по-прежнему отклоняются со списком допустимых",
+    "v2.8.0: «Простой режим» (включён по умолчанию, сохраняется в настройках): спокойная светлая тема через CSS-переменные (крупнее шрифт, больше воздуха, мягче границы); меню 11→4 пункта (Дашборд, Все лиды, Поиск компаний, Профиль и настройки) + «Добавить компанию»; на дашборде скрыты KPI-плашки и карточки «Воронка»/«Коммерческие разговоры»; скрыты hint-плашки и инфо-врезки; стены чекбоксов регионов/городов — в компактный скролл-блок. Кнопка «Полный вид» в топбаре возвращает всё обратно; ничего не удалено, только скрыто",
+    "v2.8.1 (targeted fix): (1) добавлен обработчик data-act='open-verified' — кнопка «Записать подтверждённую потребность» из modalOutreachBlocked открывает существующую modalVerified(id); (2) добавлен обработчик data-act='del-finding': каноническое хранилище редактируемых находок — реестр фактов l.facts (events/risks), удаление по образцу del-event/del-risk (splice → analyzeLead → logLead → save → render → повторное открытие modalAnalysis); находки получают back-reference ref{list,i} в производном слое analysis (persisted-схема не менялась); кнопка удаления рендерится только у находок с фактом-источником; (3) исправлен преднаходящийся баг отображения: секция «Все находки анализа» в modalAnalysis ренderила a.raw.findings (всегда пусто) вместо a.findings; (4) аудит всех literal data-act: орфанов нет (79 генерируемых актов, у всех есть case)",
+    "v2.8.1 regressions подтверждены: add-verified (карточка лида → вкладка Анализ → Записать → modalVerified), outreach blocked flow (modalOutreach → modalOutreachBlocked), persistence после reload (localStorage), нормализация AI enum v2.7.1 (STANDARD/AVERAGE→MEDIUM, мусор отклоняется), Простой режим v2.8 на месте; console runtime errors = 0",
+    "v2.9.0: ENRICHMENT ENGINE v0.1 — автоматическое обогащение компании (сайт → соцсети → email/телефон) по потоку НАЙТИ→ОЦЕНИТЬ→PREVIEW→ПОДТВЕРЖДЕНИЕ→СОХРАНИТЬ. Блок «Контакты и присутствие в интернете» во вкладке «Обзор»; режимы QUICK (≤3 search-запроса) и DEEP (≤4, + /contacts); SEARCH_PROVIDER = Brave Search API через Cloudflare Worker (ключ только в секрете Worker; в Lumo — Worker URL + раздел настроек со статусом и «Проверить подключение»); confidence 0–100 с причинами и категориями (LOW не применяется, MEDIUM только с галочкой); агрегаторы/каталоги/карты/вакансии/новости понижаются до LOW; соцсети с официального сайта (OFFICIAL_SITE_LINK, 95) + точечный site:-поиск (SEARCH_RESULT); нормализация URL (utm/share/login/главные платформ/дубли отбрасываются); email/phone парсятся с сайта и /contacts, телефон нормализуется к +7 (XXX) XXX-XX-XX; preview c selective apply и защитой существующих значений («текущее → найденное»); provenance в lead.enrichment.meta (основные поля остаются строками); кеш enrichment.last — автопоиска при открытии карточки нет; ошибки пользователя без stack trace (нет интернета/Worker/quota/сайт недоступен/пусто/LOW)",
+    "v3.0.0: Enrichment Engine переведён на LOCAL_SEARXNG (0 API-ключей): реестр ENRICH_PROVIDERS (local_searxng по умолчанию + cloudflare_worker_brave deprecated), Local Helper URL по умолчанию http://127.0.0.1:8765; статусы в настройках (Подключено / Локальный поиск не запущен / SearXNG недоступен) + модалка «Как запустить»; ошибка 503 от helper → «SearXNG недоступен»; confidence propagation: данные с сайта ≤ confidence сайта; MEDIUM (55–74) в Preview не предвыбирается; пакет local-search (docker-compose SearXNG 127.0.0.1:8888 + settings.yml с formats json и RU-движками, helper на stdlib python с CORS exact-origin + PNA + SSRF-защитой /fetch, start/stop/status .command, launchd plist); docs INSTALL/TROUBLESHOOTING"
+  ],
+  "files": {
+    "404.html": {
+      "size": 1591,
+      "sha256": "b36d3b2ac994195b4fea8d2703b36497ccaac38867e4312afb0662a740491224"
+    },
+    "index.html": {
+      "size": 1207199,
+      "sha256": "05ca6af7acb8ddbd0c797984e5228d9cfbb7c5b994080300f77ce69945ba6a66"
+    },
+    "robots.txt": {
+      "size": 268,
+      "sha256": "ade0af7bec3e6c2875993a926e4ee90b22e2cfbc5c8e69a5c3cc861944144507"
+    }
+  }
+}

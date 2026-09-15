@@ -11478,12 +11478,14 @@ const ENRICH_PROVIDERS = {
       let r; try{
         r = await fetch(base+'/search', {method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({query:String(query).slice(0,300), count: Math.min(10, Math.max(1, count||8))})});
-      }catch(e){ throw enrichFail('helper'); }
-      if(r.status===429) throw enrichFail('quota');
-      if(r.status===503) throw enrichFail('searxng');
-      if(!r.ok) throw enrichFail('helper_http');
-      const j = await r.json().catch(()=>null);
-      if(!j || !Array.isArray(j.results)) throw enrichFail('helper_http');
+      }catch(e){ ENRICH_LAST_HEALTH = {state:'UNAVAILABLE'}; throw enrichFail('helper'); }
+      const j0 = await r.json().catch(()=>null);
+      if(r.status===429){ ENRICH_LAST_HEALTH = (j0&&j0.health)||{state:'RATE_LIMITED'}; throw enrichFail('quota'); }
+      if(r.status===503){ ENRICH_LAST_HEALTH = (j0&&j0.health)||{state:'UNAVAILABLE'}; throw enrichFail('searxng'); }
+      if(!r.ok){ ENRICH_LAST_HEALTH = (j0&&j0.health)||{state:'UNAVAILABLE'}; throw enrichFail('helper_http'); }
+      const j = j0;
+      if(!j || !Array.isArray(j.results)){ ENRICH_LAST_HEALTH = {state:'UNAVAILABLE'}; throw enrichFail('helper_http'); }
+      ENRICH_LAST_HEALTH = j.health || {state:'AVAILABLE'};
       return j.results;
     },
     async fetchPage(url){
@@ -11545,6 +11547,8 @@ function enrichProvider(){
   return ENRICH_PROVIDERS.local_searxng;
 }
 /* единая точка замены источника: остальной Enrichment Engine не знает о транспорте */
+let ENRICH_LAST_HEALTH = null;
+function enrichLastHealth(){ return ENRICH_LAST_HEALTH; }
 const SEARCH_PROVIDER = {
   get id(){ return enrichProvider().id; },
   search: (q,c)=>enrichProvider().search(q,c),
@@ -11655,23 +11659,42 @@ function enrichNames(l){
 function enrichTokensAll(names){ return Array.from(new Set([].concat.apply([], names.map(n=>enrichTokens(n))))); }
 /* v3.2: данные с сайта не превосходят confidence сайта; но при HIGH+ сайте контакты/соцсети — не ниже 75 */
 function enrichSiteBound(siteConf, cap){ const b = Math.min(siteConf, cap); return siteConf >= 75 ? Math.max(b, 75) : b; }
+/* v3.3: человекочитаемые лейблы источников для Preview */
+function enrichSourceLabel(f){
+  const s = String((f && (f.sourceType||f.source))||'');
+  if(s==='OFFICIAL_SITE' || s==='KNOWN_CARD') return 'Официальный сайт';
+  if(s==='OFFICIAL_SITE_LINK' || s==='OFFICIAL_SITE_CONTACTS') return 'Официальная соцсеть/контакт с сайта';
+  if(s==='AUTHORITY_DIRECTORY') return 'Авторитетный каталог';
+  if(((f||{}).confidence||0) < 55) return 'Неподтверждённый кандидат';
+  return 'Поисковая выдача';
+}
 function enrichScoreSite(res, ctx){
-  /* v3.1: независимые признаки: название, город, адрес, телефон, ИНН, домен, authority-подтверждение */
+  /* v3.1+v3.3: независимые признаки: название, город, адрес, телефон, ИНН, домен, authority-подтверждение.
+     RELEVANCE GATE: бренд БЕЗ города/адреса/телефона/INN/известного домена — не официальный сайт (cap LOW). */
   const reasons = []; let c = 40;
   const text = ((res.title||'')+' '+(res.description||'')).toLowerCase();
   const hit = ctx.toks.filter(t=>text.includes(t));
-  if(ctx.toks.length && hit.length >= Math.min(2, ctx.toks.length)){ c += 25; reasons.push('совпадает название/бренд'); }
+  const brandHit = ctx.toks.length && hit.length >= Math.min(2, ctx.toks.length);
+  if(brandHit){ c += 25; reasons.push('совпадает название/бренд'); }
   else if(hit.length){ c += 12; reasons.push('частичное совпадение названия'); }
-  if(ctx.city && text.includes(String(ctx.city).toLowerCase())){ c += 10; reasons.push('совпадает город'); }
-  if(ctx.inn && text.includes(String(ctx.inn))){ c += 30; reasons.push('найден ИНН'); }
-  if((ctx.phones||[]).some(p=>{ const d=String(p).replace(/\D/g,''); return d.length>=10 && text.includes(d.slice(-10)); })){ c += 25; reasons.push('совпадает телефон'); }
+  const cityHit = !!(ctx.city && text.includes(String(ctx.city).toLowerCase()));
+  if(cityHit){ c += 10; reasons.push('совпадает город'); }
+  const innHit = !!(ctx.inn && text.includes(String(ctx.inn)));
+  if(innHit){ c += 30; reasons.push('найден ИНН'); }
+  const phoneHit = (ctx.phones||[]).some(p=>{ const d=String(p).replace(/\D/g,''); return d.length>=10 && text.includes(d.slice(-10)); });
+  if(phoneHit){ c += 25; reasons.push('совпадает телефон'); }
   const addr0 = String(ctx.address||'').split(',')[0].trim();
-  if(addr0 && text.includes(addr0.toLowerCase())){ c += 20; reasons.push('совпадает адрес'); }
+  const addrHit = !!(addr0 && text.includes(addr0.toLowerCase()));
+  if(addrHit){ c += 20; reasons.push('совпадает адрес'); }
   const h = enrichHost(res.url);
-  if(ctx.knownDomain && h===ctx.knownDomain){ c += 20; reasons.push('домен уже известен карточке'); }
+  const domainHit = !!(ctx.knownDomain && h===ctx.knownDomain);
+  if(domainHit){ c += 20; reasons.push('домен уже известен карточке'); }
   if(/официальн|official/i.test(res.title||'')){ c += 5; reasons.push('помечен как официальный в заголовке'); }
   if(ctx.corroborated){ c += 5; reasons.push('бренд подтверждён авторитетным источником'); }
   if(ENRICH_AUTHORITY_RE.test(h)){ c = Math.min(c, 45); reasons.push('агрегатор/authoritative-источник: не официальный сайт'); }
+  if(brandHit && !cityHit && !innHit && !phoneHit && !addrHit && !domainHit){
+    c = Math.min(c, 45); reasons.push('бренд без города/контактов/адреса/INN: недостаточно для официального сайта');
+  }
   return {conf: Math.max(0, Math.min(100, Math.round(c))), reasons};
 }
 async function enrichLead(id, mode){
@@ -11708,8 +11731,22 @@ async function enrichLead(id, mode){
     out.sort((a,b)=>b.conf-a.conf);
     return out;
   };
-  collectSite(await doSearch(`"${brand}" ${cityName} официальный сайт`.trim()));
+  /* v3.3 PRIORITY 1: известный официальный сайт — первичный источник; web search — best-effort fallback */
+  const knownSiteRaw = l.website || ((enrichMetaOf(l).website||{}).value) || '';
+  let knownCand = null;
+  if(knownSiteRaw){
+    const ku = /^https?:/i.test(knownSiteRaw) ? knownSiteRaw : 'https://'+knownSiteRaw;
+    knownCand = {url:ku, host:enrichHost(ku), title:'', conf:70, reasons:['сайт уже известен карточке'], source:'KNOWN_CARD'};
+  }
+  let searchRan = false;
+  const runSiteSearch = async () => {
+    searchRan = true;
+    collectSite(await doSearch(`"${brand}" ${cityName} официальный сайт`.trim()));
+  };
+  if(!knownCand) await runSiteSearch();
   let cands = buildCands();
+  if(knownCand) cands = cands.concat([knownCand]);
+  cands.sort((a,b)=>b.conf-a.conf);
   let best = cands[0]||null;
   if((!best || best.conf < 55) && names.length > 1){
     /* связанные сущности: группа брендов */
@@ -11746,6 +11783,27 @@ async function enrichLead(id, mode){
       else { best.conf = Math.max(20, best.conf - 25); best.reasons.push('страница не подтверждает бренд/город/контакты — confidence снижен'); }
       best.validated = true;
     } else { siteFetch = 'failed'; best.reasons.push('страница недоступна: не верифицирован'); }
+    if(best.source==='KNOWN_CARD' && (best.conf < 55 || siteFetch==='failed') && !searchRan){
+      await runSiteSearch();
+      let c2 = buildCands();
+      c2 = c2.concat([knownCand]);
+      c2.sort((a,b)=>b.conf-a.conf);
+      const nb = c2[0]||null;
+      if(nb && nb !== best && nb.conf >= 55){
+        best = nb; siteHtml = ''; siteFetch = 'none';
+        const pg = await fetchWithFallback(best.url);
+        if(pg && pg.html){
+          siteHtml = pg.html; siteFetch = 'ok';
+          const lowTxt = siteHtml.toLowerCase(); let v = 0; const vr = [];
+          if(enrichTokensAll(names).some(t=>lowTxt.includes(t))){ v += 10; vr.push('бренд упомянут на странице'); }
+          if(cityName && lowTxt.includes(String(cityName).toLowerCase())){ v += 8; vr.push('город упомянут на странице'); }
+          const xcv = enrichExtractContacts(siteHtml);
+          if(xcv.phones.length){ v += 6; vr.push('на странице есть телефон'); }
+          if(xcv.emails.length){ v += 4; vr.push('на странице есть email'); }
+          best.conf = Math.min(100, best.conf + v); best.reasons = best.reasons.concat(vr); best.validated = true;
+        } else { siteFetch = 'failed'; }
+      }
+    }
   }
 
   const E = {mode, at:new Date().toISOString(), worker:enrichWorkerUrl(), queries:0, queryLog,
@@ -11866,6 +11924,13 @@ async function enrichLead(id, mode){
       reason:'отклонён: есть более сильный кандидат · сигналы: '+(rj.signals||[]).join(', ')}); });
   });
   E.socials = enrichDedupeSocials(E.socials);
+  /* v3.3: LOW-соцсети не показываются как найденные — только «возможное совпадение, требует проверки» */
+  const socKeep = [];
+  E.socials.forEach(ss=>{
+    if((ss.confidence||0) < 55) E.low.push({kind:ss.platform, value:ss.value, confidence:ss.confidence, source:ss.source, reasons:ss.signals||ss.reasons||[]});
+    else socKeep.push(ss);
+  });
+  E.socials = socKeep;
 
   /* ---------- CONTACTS fallback: типизированный поиск (если сайта нет) ---------- */
   const contactSearch = async (kind, nameList) => {
@@ -11892,7 +11957,9 @@ async function enrichLead(id, mode){
   if(!E.phone) { const r = await contactSearch('phone', names); if(r) E.phone = r; }
 
   E.queries = used;
-  if(!searchOk && searchErrors.length) throw searchErrors[0];   /* ни один запрос не прошёл: понятная ошибка вместо пустого preview */
+  /* v3.3: поисковики — untrusted/best-effort: отказ НЕ fatal, состояние пишем в E.searchHealth */
+  E.searchHealth = used>0 ? (enrichLastHealth() || {state:'AVAILABLE'}) : {state:'NOT_USED'};
+  if(!searchOk && searchErrors.length && E.searchHealth.state==='AVAILABLE') E.searchHealth = {state:'UNAVAILABLE'};
   l.enrichment = l.enrichment || {}; l.enrichment.meta = l.enrichment.meta || {};
   l.enrichment.last = E; l.enrichment.lastAt = E.at;      /* кеш: повторно не ищем при открытии карточки */
   save();
@@ -11953,7 +12020,7 @@ function enrichPreviewModal(id){
         <div style="flex:1">
           <div class="b xs">${label} ${same?'<span class="badge ok">уже в карточке, совпадает</span>':''}</div>
           ${found?`<div class="xs mt4">${esc(found.value)} · <b>${conf}%</b> <span class="badge ${cat==='LOW'?'dgr':cat==='MEDIUM'?'warm':'ok'}">${cat}</span></div>
-            <div class="xs faint mt2">Источник: ${esc(found.source)}${(found.reasons||[]).length?' · '+esc(found.reasons.join(', ')):''}</div>
+            <div class="xs faint mt2">${esc(enrichSourceLabel(found))} · ${esc(found.source)}${found.sourceUrl?` · ${esc(found.sourceUrl)}`:''}${(found.signals||found.reasons||[]).length?' · '+esc((found.signals||found.reasons).join(', ')):''}</div>
             ${overwrite?`<div class="xs mt4" style="color:var(--warm)">Текущее: <b>${esc(cur)}</b> → найдено: <b>${esc(found.value)}</b>. Без галочки значение не меняется.</div>`:''}
             ${conf<55?'<div class="xs mt4" style="color:var(--hot)">LOW: автоматическое применение запрещено — только вручную после проверки.</div>':''}`
            :'<div class="xs faint mt4">Не найдено</div>'}
@@ -11970,6 +12037,9 @@ function enrichPreviewModal(id){
       ${(E.evidence||[]).length?`<div class="xs faint mt6">Отклонённые кандидаты (evidence): ${E.evidence.slice(0,4).map(x=>esc(x.value)+' ('+x.confidence+'%)').join(' · ')}</div>`:''}
       ${Object.keys(E.rejected||{}).length?`<div class="xs faint mt6">Отклонённые альтернативы контактов: ${Object.keys(E.rejected).map(k=>esc(k)+': '+E.rejected[k].map(x=>esc(x.value)+' ('+x.confidence+'%, '+esc(x.reason)+')').join(', ')).join(' · ')}</div>`:''}
       ${E.siteFetch==='failed'?`<div class="xs mt6" style="color:var(--warm)">Главная страница официального кандидата не загрузилась — контакты сняты только из выдачи.</div>`:''}
+      ${E.searchHealth && E.searchHealth.state && E.searchHealth.state!=='AVAILABLE' && E.searchHealth.state!=='NOT_USED'?`<div class="callout warn mt10"><div class="ct">${icon('alert')} Автоматический интернет-поиск сейчас ограничен</div>
+        <div class="xs">Состояние: ${esc(E.searchHealth.state)}${(E.searchHealth.unresponsive||[]).length?` · движки на паузе (cooldown): ${esc(E.searchHealth.unresponsive.join(', '))}`:''}.
+        Можно повторить позже или добавить сайт вручную; остальные источники (официальный сайт, каталоги) проверяются как обычно.</div></div>`:''}
       ${(E.alternatives||[]).length?`<div class="xs faint mt10">Альтернативные кандидаты сайта (не применены): ${E.alternatives.map(a=>esc(a.value)+' ('+a.confidence+'%)').join(' · ')}</div>`:''}`,
     footer:`<div class="sp"></div><button class="btn" data-close="1">Отменить</button>
       <button class="btn pri" data-act="enrich-apply" data-id="${l.id}">${icon('check')} Применить выбранные</button>`,
@@ -12019,7 +12089,10 @@ async function enrichRun(id, mode, btn){
   try{
     const E = await enrichLead(id, mode);
     if(btn){ btn.disabled = false; }
-    if(!E.website && !E.socials.length){ toast(ENRICH_ERR.noresults, 'warn', 5000); }
+    const sh = E.searchHealth || {};
+    if(sh.state && sh.state!=='AVAILABLE' && sh.state!=='NOT_USED' && !E.website){
+      toast('Автоматический интернет-поиск сейчас ограничен. Можно повторить позже или добавить сайт вручную.', 'warn', 6000);
+    } else if(!E.website && !E.socials.length){ toast(ENRICH_ERR.noresults, 'warn', 5000); }
     enrichPreviewModal(id);
   }catch(e){
     if(btn){ btn.disabled = false; }

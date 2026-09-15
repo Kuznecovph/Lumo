@@ -1,6 +1,6 @@
 {
   "product": "Lumo — AI-КЛИЕНТ-СКАУТ",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "track": "html_single_file",
   "target": "GitHub Pages (статический хостинг, автодеплой через GitHub Actions)",
   "built_at": "2026-09-13",
@@ -28,7 +28,8 @@
     "v2.8.1 (targeted fix): (1) добавлен обработчик data-act='open-verified' — кнопка «Записать подтверждённую потребность» из modalOutreachBlocked открывает существующую modalVerified(id); (2) добавлен обработчик data-act='del-finding': каноническое хранилище редактируемых находок — реестр фактов l.facts (events/risks), удаление по образцу del-event/del-risk (splice → analyzeLead → logLead → save → render → повторное открытие modalAnalysis); находки получают back-reference ref{list,i} в производном слое analysis (persisted-схема не менялась); кнопка удаления рендерится только у находок с фактом-источником; (3) исправлен преднаходящийся баг отображения: секция «Все находки анализа» в modalAnalysis ренderила a.raw.findings (всегда пусто) вместо a.findings; (4) аудит всех literal data-act: орфанов нет (79 генерируемых актов, у всех есть case)",
     "v2.8.1 regressions подтверждены: add-verified (карточка лида → вкладка Анализ → Записать → modalVerified), outreach blocked flow (modalOutreach → modalOutreachBlocked), persistence после reload (localStorage), нормализация AI enum v2.7.1 (STANDARD/AVERAGE→MEDIUM, мусор отклоняется), Простой режим v2.8 на месте; console runtime errors = 0",
     "v2.9.0: ENRICHMENT ENGINE v0.1 — автоматическое обогащение компании (сайт → соцсети → email/телефон) по потоку НАЙТИ→ОЦЕНИТЬ→PREVIEW→ПОДТВЕРЖДЕНИЕ→СОХРАНИТЬ. Блок «Контакты и присутствие в интернете» во вкладке «Обзор»; режимы QUICK (≤3 search-запроса) и DEEP (≤4, + /contacts); SEARCH_PROVIDER = Brave Search API через Cloudflare Worker (ключ только в секрете Worker; в Lumo — Worker URL + раздел настроек со статусом и «Проверить подключение»); confidence 0–100 с причинами и категориями (LOW не применяется, MEDIUM только с галочкой); агрегаторы/каталоги/карты/вакансии/новости понижаются до LOW; соцсети с официального сайта (OFFICIAL_SITE_LINK, 95) + точечный site:-поиск (SEARCH_RESULT); нормализация URL (utm/share/login/главные платформ/дубли отбрасываются); email/phone парсятся с сайта и /contacts, телефон нормализуется к +7 (XXX) XXX-XX-XX; preview c selective apply и защитой существующих значений («текущее → найденное»); provenance в lead.enrichment.meta (основные поля остаются строками); кеш enrichment.last — автопоиска при открытии карточки нет; ошибки пользователя без stack trace (нет интернета/Worker/quota/сайт недоступен/пусто/LOW)",
-    "v3.0.0: Enrichment Engine переведён на LOCAL_SEARXNG (0 API-ключей): реестр ENRICH_PROVIDERS (local_searxng по умолчанию + cloudflare_worker_brave deprecated), Local Helper URL по умолчанию http://127.0.0.1:8765; статусы в настройках (Подключено / Локальный поиск не запущен / SearXNG недоступен) + модалка «Как запустить»; ошибка 503 от helper → «SearXNG недоступен»; confidence propagation: данные с сайта ≤ confidence сайта; MEDIUM (55–74) в Preview не предвыбирается; пакет local-search (docker-compose SearXNG 127.0.0.1:8888 + settings.yml с formats json и RU-движками, helper на stdlib python с CORS exact-origin + PNA + SSRF-защитой /fetch, start/stop/status .command, launchd plist); docs INSTALL/TROUBLESHOOTING"
+    "v3.0.0: Enrichment Engine переведён на LOCAL_SEARXNG (0 API-ключей): реестр ENRICH_PROVIDERS (local_searxng по умолчанию + cloudflare_worker_brave deprecated), Local Helper URL по умолчанию http://127.0.0.1:8765; статусы в настройках (Подключено / Локальный поиск не запущен / SearXNG недоступен) + модалка «Как запустить»; ошибка 503 от helper → «SearXNG недоступен»; confidence propagation: данные с сайта ≤ confidence сайта; MEDIUM (55–74) в Preview не предвыбирается; пакет local-search (docker-compose SearXNG 127.0.0.1:8888 + settings.yml с formats json и RU-движками, helper на stdlib python с CORS exact-origin + PNA + SSRF-защитой /fetch, start/stop/status .command, launchd plist); docs INSTALL/TROUBLESHOOTING",
+    "v3.1.0: качество обогащения (без UI/редизайна/infrastructure-правок): строгий блок-лист «не официальный сайт» (reddit/форумы/соцсети/видео/карты/агрегаторы/маркетплейсы/вакансии/новости/wiki — не кандидаты в поле Сайт, только evidence); authority-источники (2GIS/турпорталы/gov) подтверждают бренд, но сайтом не становятся; связанные сущности: имя группы брендов «А / Б / В» и операционная компания участвуют в запросах SITE/VK/TG/EMAIL/PHONE; типизированные запросы по типам данных (сайт / site:vk.com|vk.ru / site:t.me|Telegram / email контакты / телефон контакты); валидация кандидата сайта фетчем главной (+бренд/город/адрес/телефон/email/соцсети на странице, иначе -25); взаимные ссылки сайт↔соцсеть +15; независимые признаки confidence (название, город, адрес, телефон, ИНН, домен, authority, mutual); LOW не применяется и показывается в preview отдельным блоком «Возможное совпадение — требуется проверка»; отклонённые кандидаты — в evidence; сильный кандидат вытесняет слабый; если ни один search не прошёл — понятная ошибка вместо пустого preview (ошибки не кешируются); regression-кейс «Деревня рыбака»/Воткинск + QA-матрица 5 компаний в docs/ENRICHMENT_QA_REPORT.md"
   ],
   "files": {
     "404.html": {
@@ -36,8 +37,8 @@
       "sha256": "b36d3b2ac994195b4fea8d2703b36497ccaac38867e4312afb0662a740491224"
     },
     "index.html": {
-      "size": 1207199,
-      "sha256": "05ca6af7acb8ddbd0c797984e5228d9cfbb7c5b994080300f77ce69945ba6a66"
+      "size": 1214814,
+      "sha256": "c44bc89cfdb32950f59fdca3048e57acc83037eb46c339acbfbeabd83f058a65"
     },
     "robots.txt": {
       "size": 268,

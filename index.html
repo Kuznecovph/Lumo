@@ -11564,6 +11564,7 @@ function enrichNormSocial(href){
   if(/(share|repost|login|signin|signup|register|setlanguage|widget|plugin|badge|oauth)/i.test(p)) return null;
   if(P.key==='telegram'){ p = p.replace(/^\/s\//,'/'); if(/^\/(share|setlanguage|login|addstickers)/.test(p)) return null; }
   if(P.key==='vk' && /^\/(search|feed|video|wall|photo|album|topic|market|events|away|dev|ads)/.test(p)) return null;
+  if(P.key==='vk') return 'https://vk.ru' + p;   /* канонический домен РФ: vk.ru вместо vk.com */
   if(P.key==='youtube' && !/^\/(@|channel\/|user\/|c\/)/.test(p)) return null;
   if(P.key==='rutube' && !/^\/(channel|person|user)/.test(p)) return null;
   if(P.key==='ok' && !/^\/(group|profile|dk)/.test(p)) return null;
@@ -11580,12 +11581,42 @@ function enrichDedupeSocials(list){
 function enrichParseSocials(html, base){
   const out = []; const re = /href=["']([^"'\s]+)["']/gi; let m;
   while((m = re.exec(html))){
-    let abs; try{ abs = new URL(m[1], base).href; }catch(e){ continue; }
+    let abs; try{ abs = new URL(m[1], base || undefined).href; }catch(e){ continue; }
     const norm = enrichNormSocial(abs); if(!norm) continue;
-    const P = ENRICH_PLATFORMS.find(pl=>norm.includes(pl.hosts[0]));
+    const P = ENRICH_PLATFORMS.find(pl=>pl.hosts.some(hh=>norm.includes(hh)));
+    if(!P) continue;
     out.push({platform:P.key, value:norm, source:'OFFICIAL_SITE_LINK', confidence:95, reasons:['ссылка найдена на официальном сайте']});
   }
   return enrichDedupeSocials(out);
+}
+/* v3.2: расширенное извлечение контактов: tel:, mailto:, JSON-LD schema.org, текст */
+function enrichExtractContacts(html){
+  const emails = [], phones = [], socials = [], sameAs = [];
+  let m; const reTel = /href=["']tel:([^"'+]+)?([^"']*)["']/gi;
+  while((m = reTel.exec(html))){ const v = enrichNormPhone((m[1]||'')+(m[2]||'')); if(v && !phones.includes(v)) phones.push(v); }
+  const reMail = /href=["']mailto:([^"']+)["']/gi;
+  while((m = reMail.exec(html))){ let v = String(m[1]).split('?')[0].trim().toLowerCase(); if(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v) && !emails.includes(v)) emails.push(v); }
+  enrichParseEmails(html).forEach(v=>{ if(!emails.includes(v)) emails.push(v); });
+  enrichParsePhones(html).forEach(v=>{ if(!phones.includes(v)) phones.push(v); });
+  const reLd = /<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi;
+  while((m = reLd.exec(html))){
+    let j; try{ j = JSON.parse(m[1]); }catch(e){ continue; }
+    const nodes = Array.isArray(j) ? j : (j && j['@graph'] && Array.isArray(j['@graph']) ? j['@graph'] : [j]);
+    nodes.forEach(n=>{
+      if(!n || typeof n!=='object') return;
+      const ty = String(n['@type']||'');
+      if(!/Organization|LocalBusiness|Business/.test(ty)) return;
+      const tel = n.telephone; const em = n.email;
+      if(typeof tel==='string'){ const v = enrichNormPhone(tel); if(v && !phones.includes(v)) phones.push(v); }
+      if(typeof em==='string'){ const v = em.trim().toLowerCase(); if(v && !emails.includes(v)) emails.push(v); }
+      const sa = n.sameAs; (Array.isArray(sa)?sa:(sa?[sa]:[])).forEach(u=>{ if(typeof u==='string') sameAs.push(u); });
+    });
+  }
+  enrichParseSocials(html, '').forEach(x=>socials.push(x));
+  sameAs.forEach(u=>{ const norm = enrichNormSocial(u); if(!norm) return;
+    const P = ENRICH_PLATFORMS.find(pl=>pl.hosts.some(hh=>norm.includes(hh)));
+    if(P && !socials.some(x=>x.value===norm)) socials.push({platform:P.key, value:norm, source:'OFFICIAL_SITE_LINK', confidence:95, reasons:['sameAs из schema.org на официальном сайте']}); });
+  return {emails, phones, socials};
 }
 function enrichParseEmails(html){
   const out = []; const re = /([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/gi; let m;
@@ -11622,6 +11653,8 @@ function enrichNames(l){
   return out.length ? out : [String(l.name||'')];
 }
 function enrichTokensAll(names){ return Array.from(new Set([].concat.apply([], names.map(n=>enrichTokens(n))))); }
+/* v3.2: данные с сайта не превосходят confidence сайта; но при HIGH+ сайте контакты/соцсети — не ниже 75 */
+function enrichSiteBound(siteConf, cap){ const b = Math.min(siteConf, cap); return siteConf >= 75 ? Math.max(b, 75) : b; }
 function enrichScoreSite(res, ctx){
   /* v3.1: независимые признаки: название, город, адрес, телефон, ИНН, домен, authority-подтверждение */
   const reasons = []; let c = 40;
@@ -11658,10 +11691,11 @@ async function enrichLead(id, mode){
 
   /* ---------- SITE: кандидаты, блок-лист «не сайт», authority-подтверждение ---------- */
   let corroborated = false;
+  const authorityUrls = [];
   const siteResults = [];
   const collectSite = rs => (rs||[]).forEach(r=>{
     const h = enrichHost(r.url); if(!h) return;
-    if(ENRICH_AUTHORITY_RE.test(h)) corroborated = true;
+    if(ENRICH_AUTHORITY_RE.test(h)){ corroborated = true; if(authorityUrls.length<2) authorityUrls.push(r.url); }
     if(ENRICH_SITE_BLOCKED_RE.test(h) || ENRICH_SITE_BLOCKED_RE.test(String(r.url||''))) return;  /* reddit/форумы/соцсети/агрегаторы — не сайт */
     siteResults.push(r);
   });
@@ -11683,41 +11717,93 @@ async function enrichLead(id, mode){
     cands = buildCands(); best = cands[0]||null;
   }
 
-  /* ---------- VALIDATE: главная страница официального кандидата ---------- */
-  let siteHtml = '';
+  /* ---------- VALIDATE + OFFICIAL SITE FIRST (v3.2) ---------- */
+  let siteHtml = '', siteFetch = 'none';
+  const fetchWithFallback = async (url) => {
+    try{ return await SEARCH_PROVIDER.fetchPage(url); }
+    catch(e){
+      try{ const u = new URL(url);
+        const alt = u.hostname.startsWith('www.') ? u.protocol+'//'+u.hostname.slice(4) : u.protocol+'//www.'+u.hostname;
+        return await SEARCH_PROVIDER.fetchPage(alt+'/'); }
+      catch(e2){ return null; }
+    }
+  };
   if(best && best.conf >= 55){
-    try{
-      const pg = await SEARCH_PROVIDER.fetchPage(best.url);
-      siteHtml = pg.html||'';
+    const pg = await fetchWithFallback(best.url);
+    if(pg && pg.html){
+      siteHtml = pg.html; siteFetch = 'ok';
       const lowTxt = siteHtml.toLowerCase();
       let v = 0; const vr = [];
       if(enrichTokensAll(names).some(t=>lowTxt.includes(t))){ v += 10; vr.push('бренд упомянут на странице'); }
       if(cityName && lowTxt.includes(String(cityName).toLowerCase())){ v += 8; vr.push('город упомянут на странице'); }
       const addr0 = String(addrKnown).split(',')[0].trim();
       if(addr0 && lowTxt.includes(addr0.toLowerCase())){ v += 10; vr.push('адрес найден на странице'); }
-      const pgPhones = enrichParsePhones(siteHtml), pgEmails = enrichParseEmails(siteHtml);
-      if(pgPhones.some(pp=>phonesKnown.includes(pp))){ v += 15; vr.push('телефон совпал с карточкой'); }
-      else if(pgPhones.length){ v += 6; vr.push('на странице есть телефон'); }
-      if(pgEmails.length){ v += 4; vr.push('на странице есть email'); }
+      const xcv = enrichExtractContacts(siteHtml);
+      if(xcv.phones.some(pp=>phonesKnown.includes(pp))){ v += 15; vr.push('телефон совпал с карточкой'); }
+      else if(xcv.phones.length){ v += 6; vr.push('на странице есть телефон'); }
+      if(xcv.emails.length){ v += 4; vr.push('на странице есть email'); }
       if(v>0){ best.conf = Math.min(100, best.conf + v); best.reasons = best.reasons.concat(vr); }
       else { best.conf = Math.max(20, best.conf - 25); best.reasons.push('страница не подтверждает бренд/город/контакты — confidence снижен'); }
       best.validated = true;
-    }catch(e){ best.reasons.push('страница недоступна: не верифицирован'); }
+    } else { siteFetch = 'failed'; best.reasons.push('страница недоступна: не верифицирован'); }
   }
 
   const E = {mode, at:new Date().toISOString(), worker:enrichWorkerUrl(), queries:0, queryLog,
-    website:null, socials:[], email:null, phone:null, evidence:[], low:[], alternatives:[]};
+    website:null, socials:[], email:null, phone:null, evidence:[], low:[], alternatives:[], rejected:{}, siteFetch};
   if(best){
-    if(best.conf >= 55) E.website = {value:best.url, confidence:best.conf, source:best.source, reasons:best.reasons};
+    best.sourceType = 'SEARCH_RESULT'; best.sourceUrl = best.url; best.signals = best.reasons.slice();
+    if(best.conf >= 55) E.website = {value:best.url, confidence:best.conf, source:best.source, sourceType:best.sourceType, sourceUrl:best.sourceUrl, signals:best.signals, reasons:best.reasons};
     else E.low.push({kind:'website', value:best.url, confidence:best.conf, source:best.source, reasons:best.reasons});
     cands.filter(c=>c!==best).slice(0,4).forEach(c=>E.evidence.push({kind:'website', value:c.url, confidence:c.conf, reasons:c.reasons}));
     E.alternatives = cands.filter(c=>c!==best).slice(0,3).map(c=>({value:c.url, confidence:c.conf, source:c.source, reasons:c.reasons}));
   }
 
-  /* ---------- SOCIALS: сначала с официального сайта (высокий confidence), затем типизированный поиск ---------- */
+  /* ---------- CONTACTS & SOCIALS: официальный сайт — primary source ---------- */
+  const socCands = [];
+  const siteUrl = best ? best.url : '';
   if(siteHtml && best){
-    enrichParseSocials(siteHtml, best.url).forEach(ss=>{ ss.confidence = Math.min(best.conf, ss.confidence); ss.reasons.push('ограничено уверенностью сайта '+best.conf+'%'); E.socials.push(ss); });
+    const xc = enrichExtractContacts(siteHtml);
+    const siteConf = best.conf;
+    xc.socials.forEach(ss=>{ socCands.push({platform:ss.platform, value:ss.value, source:'OFFICIAL_SITE_LINK', sourceType:'OFFICIAL_SITE',
+      sourceUrl:siteUrl, confidence:enrichSiteBound(siteConf, 95),
+      signals:['ссылка с официального сайта'], reasons:['ссылка с официального сайта']}); });
+    if(xc.emails[0]) E.email = {value:xc.emails[0], confidence:enrichSiteBound(siteConf,95), source:'OFFICIAL_SITE', sourceType:'OFFICIAL_SITE',
+      sourceUrl:siteUrl, signals:['email опубликован на официальном сайте'], reasons:['email на официальном сайте']};
+    if(xc.phones[0]) E.phone = {value:xc.phones[0], confidence:enrichSiteBound(siteConf,95), source:'OFFICIAL_SITE', sourceType:'OFFICIAL_SITE',
+      sourceUrl:siteUrl, signals:['телефон опубликован на официальном сайте'], reasons:['телефон на официальном сайте']};
+    if(!xc.emails[0] || !xc.phones[0]){
+      /* same-domain contact page: подсказка из html либо стандартный путь (один fetch) */
+      let cp = (siteHtml.match(/href=["'](\/[^"']*(?:contacts?|kontakty|контакт)[^"']*)["']/i)||[])[1];
+      if(!cp) cp = '/contacts/';
+      try{
+        const cu = new URL(siteUrl); const pg2 = await SEARCH_PROVIDER.fetchPage(cu.origin + cp);
+        const x2 = enrichExtractContacts(pg2.html||'');
+        if(!E.email && x2.emails[0]) E.email = {value:x2.emails[0], confidence:enrichSiteBound(siteConf,90), source:'OFFICIAL_SITE_CONTACTS', sourceType:'OFFICIAL_SITE',
+          sourceUrl:cu.origin+cp, signals:['email на странице контактов официального домена'], reasons:['email на странице контактов']};
+        if(!E.phone && x2.phones[0]) E.phone = {value:x2.phones[0], confidence:enrichSiteBound(siteConf,90), source:'OFFICIAL_SITE_CONTACTS', sourceType:'OFFICIAL_SITE',
+          sourceUrl:cu.origin+cp, signals:['телефон на странице контактов официального домена'], reasons:['телефон на странице контактов']};
+      }catch(e){ /* страница контактов недоступна — не ошибка потока */ }
+    }
   }
+  /* ---------- AUTHORITATIVE DIRECTORY: соцсети из авторитетного источника ---------- */
+  if(authorityUrls.length){
+    for(const au of authorityUrls.slice(0,2)){   /* перебор авторитетных источников: один может быть недоступен */
+      try{
+        const pgA = await SEARCH_PROVIDER.fetchPage(au);
+        const htmlA = pgA && pgA.html ? pgA.html : '';
+        if(!htmlA) continue;
+        const lowA = htmlA.toLowerCase();
+        const brandOnPage = enrichTokensAll(names).some(t=>lowA.includes(t));
+        enrichParseSocials(htmlA, au).forEach(ss=>{
+          socCands.push({platform:ss.platform, value:ss.value, source:'AUTHORITY_DIRECTORY', sourceType:'AUTHORITY_DIRECTORY',
+            sourceUrl:au, confidence: brandOnPage ? 85 : 60,
+            signals:['ссылка из авторитетного каталога'].concat(brandOnPage?['бренд упомянут на странице каталога']:[]),
+            reasons:['ссылка из авторитетного каталога']});
+        });
+      }catch(e){ continue; }
+    }
+  }
+  /* ---------- SEARCH-кандидаты соцсетей: без доп. сигнала — максимум LOW ---------- */
   const socialSearch = async (pl, nameList, qCap) => {
     let spent = 0;
     for(const nm of nameList){
@@ -11728,42 +11814,60 @@ async function enrichLead(id, mode){
         if(spent >= (qCap||2)) break; spent++;
         const rs = await doSearch(qq, 5);
         for(const r of rs){
-          const norm = enrichNormSocial(r.url); if(!norm || !pl.hosts.some(hh=>norm.includes(hh))) continue;
+          const norm = enrichNormSocial(r.url); if(!norm || !pl.hosts.some(hh=>norm.includes(hh) || norm.includes('vk.ru'))) continue;
           const text = ((r.title||'')+' '+(r.description||'')).toLowerCase();
-          const toks = enrichTokens(nm); const hit = toks.filter(t2=>text.includes(t2)).length;
-          let conf = 40 + (toks.length && hit>=Math.min(2,toks.length)?30:hit?15:0) + (cityName&&text.includes(String(cityName).toLowerCase())?10:0);
-          const slug = norm.split('/').pop();
-          if(siteHtml && slug && siteHtml.includes(slug)) conf += 15;   /* взаимная ссылка сайт↔соцсеть */
-          return {platform:pl.key, value:norm, confidence:Math.min(89,conf), source:'SEARCH_RESULT',
-            reasons: hit?['совпадение названия в поисковой выдаче']:['только поисковая выдача, нужна проверка']};
+          const toks = enrichTokens(nm); const hit = toks.filter(t2=>text.includes(t2));
+          const exact = toks.length && hit.length >= toks.length;
+          const cityHit = cityName && text.includes(String(cityName).toLowerCase());
+          const signals = [];
+          let conf = 45;                                   /* только выдача → LOW */
+          if(exact && cityHit){ conf = 65; signals.push('точное совпадение бренда и города'); }
+          else if(hit.length){ signals.push('частичное совпадение названия — недостаточно'); }
+          const snipPhones = enrichParsePhones(text);
+          if(snipPhones.some(pp=>phonesKnown.includes(pp))){ conf += 20; signals.push('телефон совпал с карточкой'); }
+          const addr0 = String(addrKnown).split(',')[0].trim();
+          if(addr0 && text.includes(addr0.toLowerCase())){ conf += 20; signals.push('адрес совпал'); }
+          if(siteUrl && text.includes(enrichHost(siteUrl).replace(/^www\./,'').split('.')[0])){ conf += 25; signals.push('упомянут официальный домен'); }
+          socCands.push({platform:pl.key, value:norm, source:'SEARCH_RESULT', sourceType:'SEARCH_RESULT',
+            sourceUrl:r.url, confidence:Math.min(89,conf), signals: signals.length?signals:['только поисковая выдача: без доп. сигнала максимум LOW'],
+            reasons: signals.length?signals:['только поисковая выдача: без доп. сигнала максимум LOW']});
+          break;
         }
       }
     }
-    return null;
   };
-  const have = new Set(E.socials.map(ss=>ss.platform));
+  const havePl = new Set(socCands.map(ss=>ss.platform));
   const prio = ['vk','telegram','dzen','youtube','rutube','ok','instagram'];
-  let wantList = prio.map(k=>ENRICH_PLATFORMS.find(pl=>pl&&pl.key===k)).filter(pl=>pl && !have.has(pl.key));
-  if(mode!=='deep') wantList = wantList.filter(pl=>pl.key==='vk' || pl.key==='telegram');  /* QUICK: только приоритетные */
+  let wantList = prio.map(k=>ENRICH_PLATFORMS.find(pl=>pl&&pl.key===k)).filter(pl=>pl && !havePl.has(pl.key));
+  if(mode!=='deep') wantList = wantList.filter(pl=>pl.key==='vk' || pl.key==='telegram');
   for(const pl of wantList.slice(0, mode==='deep'?4:2)){
-    const ss = await socialSearch(pl, names, mode==='deep'?4:2);
-    if(ss) E.socials.push(ss);
+    await socialSearch(pl, names, mode==='deep'?4:2);
   }
+  /* ---------- CONFLICT RESOLUTION: слияние одинаковых значений, лучший кандидат на платформу, остальные — rejected ---------- */
+  const srcRank = {OFFICIAL_SITE_LINK:0, AUTHORITY_DIRECTORY:1, SEARCH_RESULT:2};
+  const rk = x => (srcRank[x] != null ? srcRank[x] : 9);   /* 0 — валидный ранг, не falsy */
+  const merged = {};
+  socCands.forEach(cc=>{
+    const k = cc.platform+'|'+String(cc.value).toLowerCase();
+    const m = merged[k];
+    if(!m){ merged[k] = Object.assign({}, cc, {signals:(cc.signals||cc.reasons||[]).slice()}); return; }
+    if(cc.confidence > m.confidence) m.confidence = cc.confidence;
+    if(rk(cc.source) < rk(m.source)) m.source = cc.source;
+    m.signals = (m.signals||[]).concat(cc.signals||cc.reasons||[]);
+    m.sourceUrl = m.sourceUrl || cc.sourceUrl;
+  });
+  const byPl = {};
+  Object.values(merged).forEach(cc=>{ (byPl[cc.platform] = byPl[cc.platform]||[]).push(cc); });
+  Object.keys(byPl).forEach(k=>{
+    const list = byPl[k].slice().sort((a,b)=> (b.confidence-a.confidence) || (rk(a.source)-rk(b.source)));
+    const win = list[0];
+    E.socials.push(win);
+    list.slice(1).forEach(rj=>{ (E.rejected[k] = E.rejected[k]||[]).push({value:rj.value, confidence:rj.confidence, source:rj.source,
+      reason:'отклонён: есть более сильный кандидат · сигналы: '+(rj.signals||[]).join(', ')}); });
+  });
   E.socials = enrichDedupeSocials(E.socials);
 
-  /* ---------- CONTACTS: сайт → /contacts → типизированный поиск (в т.ч. по группе брендов) ---------- */
-  if(siteHtml && best){
-    const em = enrichParseEmails(siteHtml), ph = enrichParsePhones(siteHtml);
-    if(em[0]) E.email = {value:em[0], confidence:Math.min(best.conf,85), source:'OFFICIAL_SITE', reasons:['email на официальном сайте','ограничено уверенностью сайта '+best.conf+'%']};
-    if(ph[0]) E.phone = {value:ph[0], confidence:Math.min(best.conf,85), source:'OFFICIAL_SITE', reasons:['телефон на официальном сайте','ограничено уверенностью сайта '+best.conf+'%']};
-    if(mode==='deep' && (!E.email || !E.phone)){
-      try{
-        const cu = new URL(best.url); const pg2 = await SEARCH_PROVIDER.fetchPage(cu.origin+'/contacts');
-        if(!E.email){ const e2 = enrichParseEmails(pg2.html); if(e2[0]) E.email = {value:e2[0], confidence:Math.min(best.conf,75), source:'OFFICIAL_SITE_CONTACTS', reasons:['email на странице /contacts']}; }
-        if(!E.phone){ const p2 = enrichParsePhones(pg2.html); if(p2[0]) E.phone = {value:p2[0], confidence:Math.min(best.conf,75), source:'OFFICIAL_SITE_CONTACTS', reasons:['телефон на странице /contacts']}; }
-      }catch(e){ /* страница контактов недоступна — не ошибка потока */ }
-    }
-  }
+  /* ---------- CONTACTS fallback: типизированный поиск (если сайта нет) ---------- */
   const contactSearch = async (kind, nameList) => {
     for(const nm of nameList){
       const q = kind==='email' ? `"${nm}" ${cityName} email контакты`.trim() : `"${nm}" ${cityName} телефон контакты`.trim();
@@ -11773,10 +11877,13 @@ async function enrichLead(id, mode){
         const vals = kind==='email' ? enrichParseEmails(text) : enrichParsePhones(text);
         if(!vals[0]) continue;
         const lowT = text.toLowerCase(); const toks = enrichTokens(nm);
-        const hit = toks.filter(t2=>lowT.includes(t2)).length;
-        const conf = 40 + (toks.length && hit>=Math.min(2,toks.length)?30:hit?15:0) + (cityName&&lowT.includes(String(cityName).toLowerCase())?10:0);
-        return {value:vals[0], confidence:Math.min(89,conf), source:'SEARCH_RESULT',
-          reasons:['контакт из поискового сниппета', hit?'название совпадает':'название не подтверждено — проверить']};
+        const hit = toks.filter(t2=>lowT.includes(t2));
+        const exact = toks.length && hit.length >= toks.length;
+        const cityHit = cityName && lowT.includes(String(cityName).toLowerCase());
+        let conf = exact && cityHit ? 65 : 45;
+        const signals = exact&&cityHit ? ['точное совпадение бренда и города в сниппете'] : ['сниппет без полного совпадения: максимум LOW'];
+        return {value:vals[0], confidence:Math.min(89,conf), source:'SEARCH_RESULT', sourceType:'SEARCH_RESULT',
+          sourceUrl:r.url, signals, reasons:signals};
       }
     }
     return null;
@@ -11861,6 +11968,8 @@ function enrichPreviewModal(id){
       ${rows.join('')}
       ${(E.low||[]).length?`<div class="callout warn mt10"><div class="ct">${icon('alert')} Возможное совпадение — требуется проверка</div>${E.low.map(x=>`<div class="xs mt4">${esc(x.value)} · ${x.confidence}% · ${esc((x.reasons||[]).join(', '))} · LOW не применяется автоматически</div>`).join('')}</div>`:''}
       ${(E.evidence||[]).length?`<div class="xs faint mt6">Отклонённые кандидаты (evidence): ${E.evidence.slice(0,4).map(x=>esc(x.value)+' ('+x.confidence+'%)').join(' · ')}</div>`:''}
+      ${Object.keys(E.rejected||{}).length?`<div class="xs faint mt6">Отклонённые альтернативы контактов: ${Object.keys(E.rejected).map(k=>esc(k)+': '+E.rejected[k].map(x=>esc(x.value)+' ('+x.confidence+'%, '+esc(x.reason)+')').join(', ')).join(' · ')}</div>`:''}
+      ${E.siteFetch==='failed'?`<div class="xs mt6" style="color:var(--warm)">Главная страница официального кандидата не загрузилась — контакты сняты только из выдачи.</div>`:''}
       ${(E.alternatives||[]).length?`<div class="xs faint mt10">Альтернативные кандидаты сайта (не применены): ${E.alternatives.map(a=>esc(a.value)+' ('+a.confidence+'%)').join(' · ')}</div>`:''}`,
     footer:`<div class="sp"></div><button class="btn" data-close="1">Отменить</button>
       <button class="btn pri" data-act="enrich-apply" data-id="${l.id}">${icon('check')} Применить выбранные</button>`,

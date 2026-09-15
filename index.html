@@ -2162,7 +2162,7 @@ const REAL_LEADS = [
 {
   name:'«ЭКО Порт»', vertical:'TRAVEL', industry:'hospitality',
   subindustry:'Загородный объект размещения с событийным направлением',
-  cityKey:'votkinsk', website:'https://ecoport.ru', hasWebsite:true, employees:40, founded:2015, revenueEst:null, b2b:false,
+  cityKey:'izhevsk', website:'https://ecoport18.ru', hasWebsite:true, employees:40, founded:2015, revenueEst:null, b2b:false,
   description:'Загородный объект: домики и территория, событийные мероприятия. Несколько лет назад для объекта снимали домики и территорию.',
   products:'Размещение в домиках, территория, события, корпоративные заезды',
   objects:'Домики, территория, берег, событийная площадка, общие зоны',
@@ -5011,6 +5011,14 @@ function normalizeState(s, keepStage){
     l.ai.docs = l.ai.docs || []; l.ai.drafts = l.ai.drafts || [];
     l.archived = !!l.archived;
     l.digitalDiscovery = l.digitalDiscovery || [];
+    /* v3.3.1 data correction: the canonical Eco Port card carried a stale/wrong domain and city.
+       Apply only to the untouched old canonical values; never overwrite a user's own correction. */
+    if(l.source==='master_canonical' && /эко\s*порт/i.test(String(l.name||'')) &&
+       /^https?:\/\/(?:www\.)?ecoport\.ru\/?$/i.test(String(l.website||''))){
+      l.website = 'https://ecoport18.ru'; l.hasWebsite = true;
+      if(l.cityKey==='votkinsk') l.cityKey = 'izhevsk';
+      l.dataCorrection = 'v3.3.1: ecoport18.ru / izhevsk';
+    }
     l.vertical = l.vertical || verticalOf(l);
     l.pricingTier = l.pricingTier || 'standard';
     l.stage = canonicalStage(l.stage);
@@ -11434,7 +11442,7 @@ Object.assign(window.APP, {
    Без LLM: search → parsing → matching → confidence rules.
    Ключ поиска живёт ТОЛЬКО в Cloudflare Worker; в Lumo — только URL Worker. */
 const ENRICH_PLATFORMS = [
-  {key:'vk',        label:'VK',            hosts:['vk.com','vk.ru'],        fact:'vk'},
+  {key:'vk',        label:'VK',            hosts:['vk.com','vk.ru','vk.me'],        fact:'vk'},
   {key:'telegram',  label:'Telegram',      hosts:['t.me','telegram.me'],    fact:'telegram'},
   {key:'dzen',      label:'Дзен',          hosts:['dzen.ru'],               fact:'dzen'},
   {key:'youtube',   label:'YouTube',       hosts:['youtube.com','youtu.be'],fact:'youtube'},
@@ -11443,7 +11451,7 @@ const ENRICH_PLATFORMS = [
   {key:'instagram', label:'Instagram',     hosts:['instagram.com'],         fact:'instagram'}
 ];
 /* агрегаторы/каталоги/карты/маркетплейсы/вакансии/новости/соцсети — не официальный сайт */
-const ENRICH_SITE_BLOCKED_RE = /(reddit\.com|old\.reddit|vk\.com|vk\.ru|t\.me|telegram\.me|youtube\.com|youtu\.be|rutube\.ru|ok\.ru|dzen\.ru|zen\.yandex|instagram\.com|facebook\.com|fb\.com|twitter\.com|x\.com|linkedin\.com|2gis\.ru|2gis\.com|yandex\.ru|yandex\.com|maps\.google|google\.com\/maps|booking\.com|ostrovok\.ru|tutu\.ru|aviasales\.ru|tripadvisor\.|flamp\.|zoon\.|orgpage\.|list-org\.|rusprofile\.|sbis\.|kontur\.|zachestnyibiznes\.|checko\.|synaps\.|spark-interfax\.|tiu\.|pulscen\.|avito\.|ozon\.|wildberries\.|hh\.ru|superjob\.|zarplata\.|ria\.ru|tass\.ru|kommersant\.|interfax\.|rbc\.|lenta\.ru|gazeta\.ru|vc\.ru|habr\.|wikipedia\.|wikimedia\.|-wiki\.|wiki\.|otzovik\.|irecommend\.|forum\.|forums\.|\/forum|\/topics?\/|phpbb|discourse\.)/i;
+const ENRICH_SITE_BLOCKED_RE = /(reddit\.com|old\.reddit|vk\.com|vk\.ru|vk\.me|t\.me|telegram\.me|youtube\.com|youtu\.be|rutube\.ru|ok\.ru|dzen\.ru|zen\.yandex|instagram\.com|facebook\.com|fb\.com|twitter\.com|x\.com|linkedin\.com|2gis\.ru|2gis\.com|yandex\.ru|yandex\.com|maps\.google|google\.com\/maps|booking\.com|ostrovok\.ru|tutu\.ru|aviasales\.ru|tripadvisor\.|flamp\.|zoon\.|orgpage\.|list-org\.|rusprofile\.|sbis\.|kontur\.|zachestnyibiznes\.|checko\.|synaps\.|spark-interfax\.|tiu\.|pulscen\.|avito\.|ozon\.|wildberries\.|hh\.ru|superjob\.|zarplata\.|ria\.ru|tass\.ru|kommersant\.|interfax\.|rbc\.|lenta\.ru|gazeta\.ru|vc\.ru|habr\.|wikipedia\.|wikimedia\.|-wiki\.|wiki\.|otzovik\.|irecommend\.|forum\.|forums\.|\/forum|\/topics?\/|phpbb|discourse\.)/i;
 /* авторитетные/агрегирующие источники: подтверждают бренд, но официальным сайтом не становятся */
 const ENRICH_AUTHORITY_RE = /(2gis\.ru|flamp\.|zoon\.|tripadvisor\.|udmurt\.travel|visit-udmurtia\.|tourism\.ru|gosuslugi\.ru|gov\.ru|nalog\.ru)/i;
 const ENRICH_ERR = {
@@ -11493,20 +11501,22 @@ const ENRICH_PROVIDERS = {
       let r; try{
         r = await fetch(base+'/fetch', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url})});
       }catch(e){ throw enrichFail('helper'); }
-      if(!r.ok) throw enrichFail('fetch');
       const j = await r.json().catch(()=>null);
+      if(!r.ok){ const e = enrichFail('fetch'); e.fetchKind = (j&&j.error)||'fetch_failed'; e.fetchDetail = (j&&j.detail)||''; e.fetchStatus=(j&&j.status)||r.status; throw e; }
       if(!j || typeof j.html!=='string') throw enrichFail('fetch');
       return j;
     },
     async health(){
-      const base = this.base(); if(!base) return {ok:false, helper:false, searxng:false, kind:'helper'};
+      const base = this.base(); if(!base) return {ok:false, helper:false, searxng:false, kind:'helper', searchState:'UNAVAILABLE'};
       try{
         const r = await fetch(base+'/health', {method:'GET'});
         const j = await r.json().catch(()=>null);
         const helper = !!(r.ok && j && j.ok);
         const searxng = !!(j && j.searxng);
-        return {ok: helper && searxng, helper, searxng, provider: j&&j.provider};
-      }catch(e){ return {ok:false, helper:false, searxng:false, kind:'helper'}; }
+        const searchState = (j&&j.search&&j.search.state) || (searxng?'AVAILABLE':'UNAVAILABLE');
+        /* Helper alone is enough for OFFICIAL-SITE-FIRST extraction; SearXNG is best-effort. */
+        return {ok: helper, helper, searxng, searchState, enginesCooldown:(j&&j.search&&j.search.engines_cooldown)||[], provider: j&&j.provider};
+      }catch(e){ return {ok:false, helper:false, searxng:false, kind:'helper', searchState:'UNAVAILABLE'}; }
     }
   },
   cloudflare_worker_brave: {
@@ -11755,15 +11765,25 @@ async function enrichLead(id, mode){
   }
 
   /* ---------- VALIDATE + OFFICIAL SITE FIRST (v3.2) ---------- */
-  let siteHtml = '', siteFetch = 'none';
+  let siteHtml = '', siteFetch = 'none', siteFetchReason = '';
   const fetchWithFallback = async (url) => {
-    try{ return await SEARCH_PROVIDER.fetchPage(url); }
-    catch(e){
-      try{ const u = new URL(url);
-        const alt = u.hostname.startsWith('www.') ? u.protocol+'//'+u.hostname.slice(4) : u.protocol+'//www.'+u.hostname;
-        return await SEARCH_PROVIDER.fetchPage(alt+'/'); }
-      catch(e2){ return null; }
+    let u; try{ u = new URL(/^https?:/i.test(url)?url:'https://'+url); }catch(e){ siteFetchReason='bad_url'; return null; }
+    const hostBare = u.hostname.replace(/^www\./i,'');
+    const hosts = [u.hostname, u.hostname.startsWith('www.')?hostBare:'www.'+hostBare, hostBare];
+    const schemes = u.protocol==='https:' ? ['https:','http:'] : [u.protocol,'https:'];
+    const tries = [];
+    const seen = new Set();
+    for(const sc of schemes) for(const h of hosts){
+      const cand = sc+'//'+h+(u.pathname&&u.pathname!=='/'?u.pathname:'/');
+      if(!seen.has(cand)){ seen.add(cand); tries.push(cand); }
     }
+    let lastErr = null;
+    for(const cand of tries.slice(0,4)){
+      try{ const pg = await SEARCH_PROVIDER.fetchPage(cand); pg.requestedUrl=cand; return pg; }
+      catch(e){ lastErr=e; siteFetchReason = e.fetchKind || e.enrichKind || 'fetch_failed'; }
+    }
+    if(lastErr && lastErr.fetchDetail) siteFetchReason += ': '+lastErr.fetchDetail;
+    return null;
   };
   if(best && best.conf >= 55){
     const pg = await fetchWithFallback(best.url);
@@ -11785,31 +11805,33 @@ async function enrichLead(id, mode){
     } else { siteFetch = 'failed'; best.reasons.push('страница недоступна: не верифицирован'); }
     if(best.source==='KNOWN_CARD' && (best.conf < 55 || siteFetch==='failed') && !searchRan){
       await runSiteSearch();
-      let c2 = buildCands();
-      c2 = c2.concat([knownCand]);
-      c2.sort((a,b)=>b.conf-a.conf);
+      const c2 = buildCands().filter(c=>c.conf>=70);
       const nb = c2[0]||null;
-      if(nb && nb !== best && nb.conf >= 55){
-        best = nb; siteHtml = ''; siteFetch = 'none';
-        const pg = await fetchWithFallback(best.url);
-        if(pg && pg.html){
-          siteHtml = pg.html; siteFetch = 'ok';
-          const lowTxt = siteHtml.toLowerCase(); let v = 0; const vr = [];
-          if(enrichTokensAll(names).some(t=>lowTxt.includes(t))){ v += 10; vr.push('бренд упомянут на странице'); }
-          if(cityName && lowTxt.includes(String(cityName).toLowerCase())){ v += 8; vr.push('город упомянут на странице'); }
-          const xcv = enrichExtractContacts(siteHtml);
+      /* Search engines are untrusted. Replace an existing card site only after the alternative page itself validates. */
+      if(nb && nb.url !== best.url){
+        const pgAlt = await fetchWithFallback(nb.url);
+        if(pgAlt && pgAlt.html){
+          const htmlAlt = pgAlt.html; const lowTxt = htmlAlt.toLowerCase(); let v = 0; const vr = [];
+          const brandHit = enrichTokensAll(names).some(t=>lowTxt.includes(t));
+          const cityHit = cityName && lowTxt.includes(String(cityName).toLowerCase());
+          const xcv = enrichExtractContacts(htmlAlt);
+          if(brandHit){ v += 10; vr.push('бренд упомянут на странице'); }
+          if(cityHit){ v += 8; vr.push('город упомянут на странице'); }
           if(xcv.phones.length){ v += 6; vr.push('на странице есть телефон'); }
           if(xcv.emails.length){ v += 4; vr.push('на странице есть email'); }
-          best.conf = Math.min(100, best.conf + v); best.reasons = best.reasons.concat(vr); best.validated = true;
-        } else { siteFetch = 'failed'; }
+          if(brandHit && (cityHit || xcv.phones.length || xcv.emails.length)){
+            nb.conf = Math.min(100, nb.conf + v); nb.reasons = nb.reasons.concat(vr); nb.validated = true;
+            best = nb; siteHtml = htmlAlt; siteFetch = 'ok'; siteFetchReason='';
+          }
+        }
       }
     }
   }
 
   const E = {mode, at:new Date().toISOString(), worker:enrichWorkerUrl(), queries:0, queryLog,
-    website:null, socials:[], email:null, phone:null, evidence:[], low:[], alternatives:[], rejected:{}, siteFetch};
+    website:null, socials:[], email:null, phone:null, evidence:[], low:[], alternatives:[], rejected:{}, siteFetch, siteFetchReason};
   if(best){
-    best.sourceType = 'SEARCH_RESULT'; best.sourceUrl = best.url; best.signals = best.reasons.slice();
+    best.sourceType = best.source==='KNOWN_CARD' ? 'KNOWN_CARD' : 'SEARCH_RESULT'; best.sourceUrl = best.url; best.signals = best.reasons.slice();
     if(best.conf >= 55) E.website = {value:best.url, confidence:best.conf, source:best.source, sourceType:best.sourceType, sourceUrl:best.sourceUrl, signals:best.signals, reasons:best.reasons};
     else E.low.push({kind:'website', value:best.url, confidence:best.conf, source:best.source, reasons:best.reasons});
     cands.filter(c=>c!==best).slice(0,4).forEach(c=>E.evidence.push({kind:'website', value:c.url, confidence:c.conf, reasons:c.reasons}));
@@ -12036,7 +12058,7 @@ function enrichPreviewModal(id){
       ${(E.low||[]).length?`<div class="callout warn mt10"><div class="ct">${icon('alert')} Возможное совпадение — требуется проверка</div>${E.low.map(x=>`<div class="xs mt4">${esc(x.value)} · ${x.confidence}% · ${esc((x.reasons||[]).join(', '))} · LOW не применяется автоматически</div>`).join('')}</div>`:''}
       ${(E.evidence||[]).length?`<div class="xs faint mt6">Отклонённые кандидаты (evidence): ${E.evidence.slice(0,4).map(x=>esc(x.value)+' ('+x.confidence+'%)').join(' · ')}</div>`:''}
       ${Object.keys(E.rejected||{}).length?`<div class="xs faint mt6">Отклонённые альтернативы контактов: ${Object.keys(E.rejected).map(k=>esc(k)+': '+E.rejected[k].map(x=>esc(x.value)+' ('+x.confidence+'%, '+esc(x.reason)+')').join(', ')).join(' · ')}</div>`:''}
-      ${E.siteFetch==='failed'?`<div class="xs mt6" style="color:var(--warm)">Главная страница официального кандидата не загрузилась — контакты сняты только из выдачи.</div>`:''}
+      ${E.siteFetch==='failed'?`<div class="xs mt6" style="color:var(--warm)">Главная страница официального кандидата не загрузилась${E.siteFetchReason?' ('+esc(E.siteFetchReason)+')':''} — контакты сняты только из доступных источников.</div>`:''}
       ${E.searchHealth && E.searchHealth.state && E.searchHealth.state!=='AVAILABLE' && E.searchHealth.state!=='NOT_USED'?`<div class="callout warn mt10"><div class="ct">${icon('alert')} Автоматический интернет-поиск сейчас ограничен</div>
         <div class="xs">Состояние: ${esc(E.searchHealth.state)}${(E.searchHealth.unresponsive||[]).length?` · движки на паузе (cooldown): ${esc(E.searchHealth.unresponsive.join(', '))}`:''}.
         Можно повторить позже или добавить сайт вручную; остальные источники (официальный сайт, каталоги) проверяются как обычно.</div></div>`:''}
@@ -12108,8 +12130,9 @@ async function enrichTestWorker(btn){
   cfg.status = h; cfg.statusAt = new Date().toISOString();
   save(); if(btn){ btn.disabled = false; }
   render();
-  if(h.ok) toast('Подключено: локальный поиск готов', 'ok');
-  else if(h.helper && !h.searxng) toast('Helper отвечает, но SearXNG недоступен: запустите Docker-контейнер SearXNG', 'warn', 5200);
+  if(h.ok && h.searxng && h.searchState==='AVAILABLE') toast('Подключено: helper и интернет-поиск готовы', 'ok');
+  else if(h.ok && h.helper) toast('Helper подключён. Официальные сайты можно проверять; интернет-поиск сейчас частично ограничен.', 'warn', 5200);
+  else if(h.helper && !h.searxng) toast('Helper отвечает, но SearXNG недоступен. Проверка известных сайтов продолжает работать.', 'warn', 5200);
   else toast('Локальный поисковый сервис не запущен: смотрите «Как запустить» в настройках обогащения', 'warn', 5200);
 }
 function enrichHowtoModal(){
@@ -12138,7 +12161,8 @@ function enrichSettingsInject(){
   const prov = enrichProvider();
   const st = cfg.status || {};
   const status = prov.id==='local_searxng'
-    ? (st.helper && st.searxng ? ['● Подключено','ok'] : st.helper ? ['⚠ SearXNG недоступен','warm'] : ['○ Локальный поиск не запущен','gray'])
+    ? (st.helper && st.searxng && (!st.searchState || st.searchState==='AVAILABLE') ? ['● Подключено','ok']
+      : st.helper ? ['⚠ Helper работает · поиск ограничен','warm'] : ['○ Локальный helper не запущен','gray'])
     : (st.ok ? ['● Подключено','ok'] : ['○ Worker не отвечает','gray']);
   const wrap = document.createElement('div');
   wrap.innerHTML = `<div class="card mt14" id="enrich-settings-card"><div class="card-h"><div class="ct">${icon('globe')} Автоматическое обогащение</div>
@@ -12150,6 +12174,7 @@ function enrichSettingsInject(){
       <div class="xs mut mb6">Local Helper URL (Lumo → helper на MacBook → локальный SearXNG). По умолчанию http://127.0.0.1:8765</div>
       <input id="enrich-helper-url" class="inp mono xs" style="width:100%" placeholder="http://127.0.0.1:8765" value="${esc(cfg.helperUrl||'')}">`:''}
       ${cfg.workerUrl?`<div class="hintbox mt10">Legacy Cloudflare Worker (${esc(cfg.workerUrl)}) помечен deprecated: ключ Brave больше не обязателен, поиск работает локально. Переключить провайдер: <button class="btn xs" data-act="enrich-provider-legacy">Worker (deprecated)</button></div>`:''}
+      ${prov.id==='local_searxng' && st.helper?`<div class="xs mb8"><span class="mut">Helper:</span> <b>подключён</b> · <span class="mut">SearXNG:</span> <b>${st.searxng?'доступен':'недоступен'}</b>${st.searchState?` · <span class="mut">поисковые движки:</span> <b>${esc(st.searchState)}</b>`:''}</div>`:''}
       <div class="row nw mt10" style="gap:8px">
         <button class="btn xs" data-act="enrich-test-worker">${icon('plug')} Проверить подключение</button>
         <button class="btn xs" data-act="enrich-howto">${icon('doc')} Как запустить</button>

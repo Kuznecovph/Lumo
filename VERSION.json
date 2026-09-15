@@ -1,0 +1,37 @@
+{
+  "product": "Lumo — AI-КЛИЕНТ-СКАУТ",
+  "version": "2.6",
+  "track": "html_single_file",
+  "target": "GitHub Pages (статический хостинг, автодеплой через GitHub Actions)",
+  "built_at": "2026-09-13",
+  "packaged_at": "2026-09-15",
+  "tests": "72/72 (node --max-old-space-size=896 test.js, jsdom)",
+  "privacy": {
+    "robots_txt": "Disallow: /",
+    "meta_robots": "noindex, nofollow",
+    "real_leads": "встроены в index.html (решение пользователя: оставить как есть); публичный репозиторий = исходник виден всем",
+    "note": "на GitHub Pages кастомные HTTP-заголовки недоступны (netlify.toml удалён)"
+  },
+  "external_api": [
+    "https://suggestions.dadata.ru — CORS: *, ключ вводится пользователем, хранится в localStorage"
+  ],
+  "changes_vs_netlify_pack": [
+    "netlify.toml удалён (не поддерживается GitHub Pages)",
+    "404.html: редирект адаптирован под подпапку username.github.io/repo/",
+    "добавлены .nojekyll, .github/workflows/deploy.yml, README.md"
+  ],
+  "files": {
+    "404.html": {
+      "size": 1591,
+      "sha256": "b36d3b2ac994195b4fea8d2703b36497ccaac38867e4312afb0662a740491224"
+    },
+    "index.html": {
+      "size": 1156471,
+      "sha256": "0c7addf306ffa6468ae58e87160d9da432405be974ee50b4aa23cd1dfadef330"
+    },
+    "robots.txt": {
+      "size": 268,
+      "sha256": "ade0af7bec3e6c2875993a926e4ee90b22e2cfbc5c8e69a5c3cc861944144507"
+    }
+  }
+}

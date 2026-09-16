@@ -450,18 +450,11 @@ body{font-size:14px}
 .card{border-radius:14px;border:1px solid var(--line);box-shadow:var(--sh-1)}
 .card-h{padding:12px 16px}
 .card-b{padding:16px}
-.sidebar{width:236px}
+.sidebar{width:236px;flex:0 0 236px}
 .nav-sec{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:14px 12px 6px}
 .nav-item{border-radius:9px;margin:1px 8px;padding:8px 10px;color:var(--ink-2);font-weight:500}
 .nav-item.active{background:var(--acc-2);color:var(--acc-ink);font-weight:600}
 .nav-item:hover{background:var(--line-2)}
-/* v3.4.1 hotfix: UI-refresh light nav styles must not bleed into dark sidebar */
-.sidebar .nav-item{color:var(--sb-ink)}
-.sidebar .nav-item:hover{background:var(--sb-2);color:#e5ebf3}
-.sidebar .nav-item.active{background:#243449;color:#fff;font-weight:600}
-.sidebar .nav-item.active:hover{background:#2b3d55;color:#fff}
-.sidebar .nav-item .cnt{background:#2c3a4e;color:#c3cedd}
-.sidebar .nav-item.active .cnt{background:#33445c;color:#e8eef6}
 .sb-cta{width:calc(100% - 20px);margin:12px 10px 6px;display:flex;align-items:center;justify-content:center;gap:8px}
 .sb-mode{margin:10px 10px 6px;display:flex;background:var(--line-2);border-radius:9px;padding:3px;gap:3px}
 .sb-mode button{flex:1;height:26px;border:0;background:transparent;border-radius:7px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer}
@@ -519,6 +512,13 @@ body.lumo-simple .expert-only{display:none!important}
 @media (max-width:1024px){.next-row{grid-template-columns:1fr auto}}
 ::selection{background:#cfe0fd}
 #tb-ind,#tb-city{width:auto;min-width:150px;flex:0 0 auto}
+/* v3.4.0 fix: scrollbar навигации sidebar — тёмный/прозрачный, не перекрывает nav */
+.sidebar .nav{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.sidebar .nav::-webkit-scrollbar{width:8px;height:8px}
+.sidebar .nav::-webkit-scrollbar-track{background:transparent}
+.sidebar .nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border:2px solid transparent;border-radius:8px;background-clip:padding-box}
+.sidebar .nav::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.24);background-clip:padding-box}
+.sidebar .nav::-webkit-scrollbar-corner{background:transparent}
 #drawer .inp,#drawer select{width:100%}
 </style>
 </head>
@@ -4469,7 +4469,7 @@ function recommendOffer(lead, a, profile){
   const add = (id, fit, ev) => {
     const o = OFFERS[id]; if(!o) return;
     if(o.forInd[0]!=='all' && !o.forInd.includes(lead.industry)) return;
-    if(a.score.score < (o.minScore||0)) return;
+    if(a.score.points < (o.minScore||0)) return;
     const okService = id==='TEST_PACKAGE' || served.some(s => o.scope.some(()=>true) && (
       (id==='INDUSTRIAL_MEDIA_BANK'&&s==='INDUSTRIAL')||(id==='TECHNOLOGY_CASE'&&s==='TECH_CASE')||
       (id==='CORPORATE_PHOTO'&&s==='CORPORATE')||(id==='PRODUCTION_VIDEO'&&s==='PRODUCTION_VIDEO')||
@@ -4522,7 +4522,7 @@ function recommendOffer(lead, a, profile){
     add('CORPORATE_PHOTO', 62 + (has('NEW_OBJECT')?16:0),
       [{text:'Портреты врачей и интерьеры — основа доверия пациента к клинике.', conf:0.75},
        has('NEW_OBJECT') ? {text:`Открытие филиала: «${(f.events.find(e=>e.type==='NEW_OBJECT')||{}).title}» — нужен визуал до запуска.`, conf:0.7} : null].filter(Boolean));
-  if(gapTags.includes('site') && gapTags.includes('photos') && a.score.score>=35)
+  if(gapTags.includes('site') && gapTags.includes('photos') && a.score.points>=35)
     add('CONTENT_UPDATE', 54 + (a.gap.score>=60?14:0),
       [{text:`Пробел в контенте = ${a.gap.score}: самый быстрый вход — точечно заменить устаревший визуал.`, conf:0.7}]);
   if(a.op.score>=45 && (has('INVESTMENT')||has('NEW_LINE')||has('NEW_OBJECT')||has('GRANT')))
@@ -4682,7 +4682,7 @@ function buildSummary(lead, a){
   const why = a.whyNow.best ? a.whyNow.best.title : (a.op.items[0] ? a.op.items[0].title : (a.gap.items[0] ? a.gap.items[0].title.toLowerCase() : 'устойчивый контентный пробел'));
   const channel = (a.contact.primary && a.contact.primary.channels && a.contact.primary.channels[0]) ? CHANNEL_LABEL[a.contact.primary.channels[0].type] : null;
   const confTxt = a.conf.level==='HIGH' ? 'данных достаточно' : a.conf.level==='MEDIUM' ? 'часть выводов требует проверки' : 'данных мало, выводы предварительные';
-  const tail = `Рейтинг лида ${a.score.score} (${a.score.tierLabel}), Достоверность аудита ${round(a.conf.conf,2)} — ${confTxt}.`;
+  const tail = `Рейтинг лида ${a.score.points}/100 (${a.score.bandLabel}), Достоверность аудита ${round(a.conf.conf,2)} — ${confTxt}.`;
 
   if(a.risk.level==='BLOCK')
     return `Писать не стоит: ${a.risk.items.filter(i=>i.level==='HIGH'||i.level==='BLOCK').map(i=>i.label.toLowerCase()).join(', ')}. ${a.risk.verdict} Базовая оценка без учёта риска была ${a.score.base} — но это не повод рисковать деньгами и временем.`;
@@ -4741,14 +4741,7 @@ function analyzeLead(lead, profile){
   };
 
   // Подтверждённая потребность имеет приоритет над гипотезами системы
-  if(verifiedNeed.rejected.length){
-    score.score = Math.round(score.score * 0.5);
-    const t2 = tierOf(score.score);
-    Object.assign(score, {tier:t2.id, tierLabel:t2.label, tierRu:t2.ru, action:t2.action, color:t2.color, cls:t2.cls,
-      override:{type:'REJECTED', note:'Клиент сообщил, что потребности нет — гипотезы Пробел в контенте и Контентная возможность считаются опровергнутыми, оценка снижена вдвое.', factor:0.5}});
-  } else if(verifiedNeed.confirmed.length){
-    score.override = {type:'CONFIRMED', note:'Потребность подтверждена клиентом — это самый весомый аргумент в карточке.', factor:1};
-  }
+  /* v3.4.3 LUMO-QA-002: legacy-блок удалён — halving Score при REJECTED и override считаются в computeScore (points/band) */
 
   const a = {
     at: new Date().toISOString(), engine:'rules-v1', distKm, industryLabel:ind.label,
@@ -5144,7 +5137,7 @@ function addLead(data, opts){
   lead.pricingTier = lead.pricingTier || 'standard';
   lead.stage = canonicalStage(lead.stage);
   if(!lead.stageManual && (!lead.stage || lead.stage==='DISCOVERY')) lead.stage = lead.analysis.recommendedStage || 'DISCOVERY';
-  logLead(lead, 'create', 'Компания добавлена в базу', `Источник: ${lead.source}. Lead Score ${lead.analysis.score.score} (${lead.analysis.score.tierLabel}).`);
+  logLead(lead, 'create', 'Компания добавлена в базу', `Источник: ${lead.source}. Lead Score ${lead.analysis.score.points}/100 (${lead.analysis.score.bandLabel}).`);
   DB.leads.unshift(lead);
   if(!opts || !opts.silent) logGlobal('lead', 'Добавлена компания', lead.name);
   save(); return lead;
@@ -5175,7 +5168,7 @@ function updateFacts(id, patch){
   if(patch && Object.keys(patch).some(k => ['sitePhotoCount','siteHasVideo','siteLastUpdate','siteHasCatalog','siteHasCases','siteHasTeam',
       'social','socialActive','socialLastPost','cardsPresent','cardsFresh','hiring','hiringCount'].includes(k))) l.footprintUnknown = false;
   l.analysis = analyzeLead(l, DB.profile);
-  if(changes.length) logLead(l, 'facts', 'Обновлены факты компании', changes.join('; ') + `. Lead Score → ${l.analysis.score.score}`, false);
+  if(changes.length) logLead(l, 'facts', 'Обновлены факты компании', changes.join('; ') + `. Lead Score → ${l.analysis.score.points}/100`, false);
   save(); return l;
 }
 function fmtVal(v){ if(v===null||v===undefined||v==='') return '—'; if(typeof v==='boolean') return v?'да':'нет'; if(Array.isArray(v)) return v.length?v.join(', '):'—'; return String(v); }
@@ -5567,11 +5560,6 @@ function ensureDrawer(){
       <button class="btn xs gh" data-act="drawer-close" aria-label="Закрыть панель">${icon('x')}</button></div><div class="dr-b" id="drawer-body"></div>`;
     document.body.appendChild(ovl); document.body.appendChild(dr);
     ovl.onclick = closeDrawer;
-    /* v3.4.2: ссылки внутри quick-preview должны закрывать drawer, но сохранять штатную навигацию href. */
-    dr.addEventListener('click', e => {
-      const a = e.target.closest('a[href]');
-      if(a) closeDrawer();
-    });
     document.addEventListener('keydown', e => { if(e.key==='Escape') closeDrawer(); });
   }
   return document.getElementById('drawer');
@@ -5655,6 +5643,8 @@ function render(){
 }
 
 /* ===================== 6. FILTERS ===================== */
+/* v3.4.3 LUMO-QA-001: единый источник истины для Follow-up */
+function isFollowUp(l){ return l.outreachStatus==='FOLLOW_UP' || !!(l.nextStepDate && l.nextStepDate<=iso(TODAY)); }
 function resetFilters(){ UI.filters = {q:'', industry:'', city:'', rel:[], stage:[], tier:[], readiness:[], vertical:'', minScore:0, offer:'', outreach:'', lastContact:'', projectId:'', quick:null, showArchived:!!((DB.ui||{}).showArchived)}; UI.sel.clear(); }
 function applyQuick(k){ UI.filters.quick = (UI.filters.quick===k ? null : k); UI.filters.minScore = 0; UI.filters.stage=[]; UI.filters.outreach=''; UI.filters.offer=''; UI.filters.rel=[]; UI.filters.tier=[]; UI.filters.readiness=[]; UI.filters.vertical=''; UI.filters.q=''; UI.filters.industry=''; UI.filters.city=''; UI.filters.projectId=''; UI.filters.lastContact=''; }
 
@@ -5677,7 +5667,7 @@ function filterLeads(list){
     if(f.quick==='watchlist') out = out.filter(l => l.watch || (l.analysis.watchlist.eligible && l.analysis.whyNow.score<38));
     if(f.quick==='legal') out = out.filter(l => l.analysis.entity.status!=='RESOLVED');
     if(f.quick==='no_response') out = out.filter(l => ['NO_RESPONSE','CONTACTED','GATEKEEPER_ACK'].includes(l.outreachStatus));
-    if(f.quick==='followup') out = out.filter(l => l.outreachStatus==='FOLLOW_UP' || (l.nextStepDate && l.nextStepDate<=iso(TODAY)));
+    if(f.quick==='followup') out = out.filter(l => isFollowUp(l));
     if(f.quick==='warm') out = out.filter(l => l.relationship!=='COLD' || POSITIVE_STATUS.includes(l.outreachStatus));
     if(f.quick==='won') out = out.filter(l => l.outcome==='WON' || l.outreachStatus==='WON' || l.relationship==='EXISTING_CLIENT');
     if(f.quick==='lost') out = out.filter(l => l.outcome==='LOST' || l.outreachStatus==='LOST' || l.outcome==='STOP');
@@ -5804,7 +5794,7 @@ function dashMetrics(){
   m.contactLow = L.filter(l => l.analysis.contactability.level==='LOW' && l.analysis.score.points>=60).length;
   m.watchlist = L.filter(l => l.watch || (l.analysis.watchlist.eligible && l.analysis.whyNow.score<38)).length;
   m.noResponse = L.filter(l => ['NO_RESPONSE','CONTACTED','GATEKEEPER_ACK'].includes(l.outreachStatus) && l.outcome!=='WON').length;
-  m.followUp = L.filter(l => l.outreachStatus==='FOLLOW_UP' || (l.nextStepDate && l.nextStepDate<=iso(TODAY))).length;
+  m.followUp = L.filter(l => isFollowUp(l)).length;
   m.verified = L.filter(l => (l.verifiedContentNeeds||[]).some(v=>v.status==='CONFIRMED')).length;
   m.fsNew = L.filter(l => ['NOT_STARTED','PLANNED'].includes(l.outreachStatus) && !isClosed(l)).length;
   m.fsContacted = L.filter(l => l.outreachStatus==='CONTACTED').length;
@@ -5828,7 +5818,7 @@ function viewDashboard(){
   const act = activeLeads().filter(l=>!isClosed(l));
   const canWrite = act.filter(l=>l.analysis.readiness.state==='READY');
   const needCheck = act.filter(l=>l.analysis.readiness.state==='READY_VERIFY');
-  const follow = act.filter(l=>['NO_RESPONSE','FOLLOW_UP'].includes(l.outreachStatus));
+  const follow = act.filter(l=>isFollowUp(l));
   const stop = act.filter(l=>l.analysis.readiness.state==='STOP');
   const tiles = [
     {cls:'ok', v:canWrite.length, l:'Можно писать'},
@@ -5893,7 +5883,7 @@ function viewLeads(){
         <button class="btn sm ${DB.ui.viewMode==='table'?'seg-on':'gh'}" data-act="view-mode" data-m="table">${icon('list')} Таблица</button>
         <button class="btn sm ${DB.ui.viewMode==='kanban'?'seg-on':'gh'}" data-act="view-mode" data-m="kanban">${icon('kanban')} Цепочка</button>
       </div>
-      <button class="btn sm" data-act="export-csv">${icon('down')} CSV</button>
+      <button class="btn sm" data-act="export-csv-view" title="Экспорт текущей выборки">${icon('down')} CSV (выборка)</button>
     </div></div></div>
     <div class="mt10" id="leads-body">${DB.ui.viewMode==='kanban'?kanbanHtml(filterLeads(DB.leads)):tableHtml(filterLeads(DB.leads))}</div>`;
   const tq = $('#tb-q'); if(tq) tq.oninput = e => { UI.filters.q = e.target.value; refreshLeadsView(); };
@@ -5958,7 +5948,7 @@ function tableHtml(list){
         ${COLS.map(c=>vis.includes(c.k)?cell(c.k,l):'').join('')}</tr>`; }).join('')}
       </tbody></table></div>
     <div class="card-f row"><span class="xs muted">Показано ${list.length} из ${(UI.filters.showArchived?DB.leads.length:activeLeads()).length|| (UI.filters.showArchived?DB.leads.length:activeLeads().length)}</span>
-      <div class="sp"></div><button class="btn sm" data-act="export-csv">${icon('down')} Экспорт CSV</button></div></div>`;
+      <div class="sp"></div><button class="btn sm" data-act="export-csv-view">${icon('down')} Экспорт CSV (выборка)</button></div></div>`;
 }
 function kanbanHtml(list){
   const groups = PIPELINE_C.map(s => ({...s, items:list.filter(l=>l.stage===s.id)})).filter(g=>g.items.length || g.group!=='contact');
@@ -6501,14 +6491,17 @@ function tabOverview(l){
 
     <div class="col">
       <div class="card"><div class="card-h">${icon('box')}<div><h3>Основной оффер</h3><div class="sub">Уверенность в оффере: ${esc(a.offers.confidence)}</div></div></div>
-        <div class="card-b tight">${a.offers.primary?`<div style="padding:4px 6px">
-          <div class="b">${esc(a.offers.primary.name)} <span class="faint mono xs">${esc(a.offers.primary.id)}</span></div>
-          <div class="xs muted mt6">${esc(a.offers.primary.short)} · fit ${a.offers.primary.fit}</div>
-          ${a.offers.secondary?`<div class="mt10"><div class="xs muted b">SECONDARY (максимум один)</div>
-            <div class="sm b mt6">${esc(a.offers.secondary.name)} <span class="faint mono xs">${esc(a.offers.secondary.id)}</span></div></div>`:''}
-          ${a.offers.primary.note?`<div class="hintbox mt10 xs">${esc(a.offers.primary.note)}</div>`:''}
+        <div class="card-b tight"><div style="padding:4px 6px">
+          ${l.primaryOffer?`<div class="xs muted b">ВЫБРАНО</div>
+            <div class="b mt6">${esc((offerById(l.primaryOffer)||{}).name||l.primaryOffer)} <span class="faint mono xs">${esc(l.primaryOffer)}</span></div>
+            ${l.secondaryOffer?`<div class="sm b mt6">${esc((offerById(l.secondaryOffer)||{}).name||l.secondaryOffer)} <span class="faint mono xs">${esc(l.secondaryOffer)}</span> <span class="xs muted">secondary</span></div>`:''}`
+          :`<div class="xs muted b">ВЫБРАНО</div><div class="sm muted mt6">не выбрано — действует рекомендация</div>`}
+          ${a.offers.primary?`<div class="xs muted b mt10">РЕКОМЕНДАЦИЯ LUMO</div>
+            <div class="sm mt6 ${l.primaryOffer===a.offers.primary.id?'muted':''}">${esc(a.offers.primary.name)} <span class="faint mono xs">${esc(a.offers.primary.id)}</span> · fit ${a.offers.primary.fit}</div>
+            ${a.offers.secondary&&a.offers.secondary.id!==l.secondaryOffer?`<div class="xs muted mt6">+ ${esc(a.offers.secondary.name)} <span class="mono xs">${esc(a.offers.secondary.id)}</span></div>`:''}`:''}
+          ${a.offers.primary&&a.offers.primary.note?`<div class="hintbox mt10 xs">${esc(a.offers.primary.note)}</div>`:''}
           ${a.pricing?`<div class="row mt10 nw"><span class="badge purple">${money(a.pricing.price.final)}</span><span class="xs muted">${esc(a.pricing.tier)} · Себестоимость ${money(a.pricing.breakdown.costBase)}</span></div>`:''}
-        </div>`:'<div class="sm muted" style="padding:4px 6px">Оффер не назначен.</div>'}</div>
+        </div></div>
         <div class="card-f row"><button class="btn sm" data-act="save-offer" data-id="${l.id}">Выбрать оффер</button>
           <button class="btn sm gh" data-act="show-pricing" data-id="${l.id}">Расчёт</button></div></div>
 
@@ -6985,9 +6978,9 @@ function tabHistory(l){
       <div class="sp"></div><span class="badge gray">${h.length}</span></div>
       <div class="card-b"><div class="timeline">
         ${h.length?h.map(e=>`<div class="tl-i ${e.auto?'auto':e.type==='feedback'?'ok':e.type==='risk'?'dgr':''}">
-          <div class="tl-h"><span class="tl-t">${esc(e.title)}</span><span class="badge gray">${esc(typeLabel[e.type]||e.type)}</span>
+          <div class="tl-h"><span class="tl-t">${esc(String(e.title).replace(/undefined/g,'—'))}</span><span class="badge gray">${esc(typeLabel[e.type]||e.type)}</span>
             ${e.auto?'<span class="badge outline">автоматически</span>':''}<span class="tl-d">${fmtDateTime(e.at)}</span></div>
-          ${e.detail?`<div class="tl-b">${esc(e.detail)}</div>`:''}</div>`).join('')
+          ${e.detail?`<div class="tl-b">${esc(String(e.detail).replace(/undefined/g,'—'))}</div>`:''}</div>`).join('')
           :'<div class="sm muted">Записей нет.</div>'}
       </div></div></div>
     <div class="col">
@@ -7179,10 +7172,10 @@ function modalLead(id){
         if(l){ const nf = Object.assign({}, l.facts, {notes:v.l_notes});
           updateLead(l.id, patch, 'Изменены данные компании');
           const cur = leadById(l.id); cur.facts = nf; cur.analysis = analyzeLead(cur, DB.profile); save();
-          closeModal(); toast('Сохранено. Рейтинг лида '+cur.analysis.score.score+' ('+cur.analysis.score.tierLabel+')','ok'); render();
+          closeModal(); toast('Сохранено. Рейтинг лида '+cur.analysis.score.points+'/100 ('+cur.analysis.score.bandLabel+')','ok'); render();
         } else {
           const nl = addLead(Object.assign(patch, {entity:{demo:true, confidence:'NONE'}, facts:{events:[], risks:[], social:[], hiringRoles:[], notes:v.l_notes}}));
-          closeModal(); toast('Добавлено: Рейтинг лида '+nl.analysis.score.score+' ('+nl.analysis.score.tierLabel+')','ok');
+          closeModal(); toast('Добавлено: Рейтинг лида '+nl.analysis.score.points+' ('+nl.analysis.score.bandLabel+')','ok');
           location.hash = '#/lead/'+nl.id; render();
           setTimeout(()=>modalAnalysis(nl.id), 260);
         }
@@ -7249,7 +7242,7 @@ function modalFacts(id){
       $('#m-save-facts').onclick = () => { const v = readFields(fields);
         updateFacts(l.id, normalizeFactValues(v));
         const nl = leadById(l.id);
-        closeModal(); toast('Факты сохранены. Рейтинг лида '+nl.analysis.score.score+' · Confidence '+round(nl.analysis.conf.conf,2),'ok'); render();
+        closeModal(); toast('Факты сохранены. Рейтинг лида '+nl.analysis.score.points+' · Confidence '+round(nl.analysis.conf.conf,2),'ok'); render();
       };
     }});
 }
@@ -7283,7 +7276,7 @@ function modalEvent(id){
       l.facts.events = l.facts.events||[];
       l.facts.events.push({type:v.e_type, date:v.e_date, title:v.e_title, amount:v.e_amount||undefined, source:v.e_source, conf:Number(v.e_conf)||0.5, detail:v.e_detail});
       l.analysis = analyzeLead(l, DB.profile);
-      logLead(l,'facts','Добавлено событие', `${evLabel(v.e_type)}: ${v.e_title} (${fmtDate(v.e_date)}), источник ${SOURCES[v.e_source].label}, conf ${v.e_conf}. Рейтинг лида → ${l.analysis.score.score}`);
+      logLead(l,'facts','Добавлено событие', `${evLabel(v.e_type)}: ${v.e_title} (${fmtDate(v.e_date)}), источник ${SOURCES[v.e_source].label}, conf ${v.e_conf}. Рейтинг лида → ${l.analysis.score.points}`);
       save(); closeModal(); toast('Событие добавлено, Почему сейчас = '+l.analysis.whyNow.score,'ok'); render(); };
     }});
 }
@@ -7305,7 +7298,7 @@ function modalRisk(id){
       l.facts.risks = l.facts.risks||[];
       l.facts.risks.push({type:v.r_type, level:v.r_level, note:v.r_note, source:v.r_source, conf:Number(v.r_conf)||0.6, mitigation:v.r_mit||null});
       l.analysis = analyzeLead(l, DB.profile);
-      logLead(l,'risk','Добавлен риск', `${riskLabel(v.r_type)} [${v.r_level}]: ${v.r_note}. Итоговый риск ${l.analysis.risk.level}, Рейтинг лида → ${l.analysis.score.score}`);
+      logLead(l,'risk','Добавлен риск', `${riskLabel(v.r_type)} [${v.r_level}]: ${v.r_note}. Итоговый риск ${l.analysis.risk.level}, Рейтинг лида → ${l.analysis.score.points}`);
       save(); closeModal(); toast('Риск добавлен. Итог: '+l.analysis.risk.level,'warn'); render(); };
     }});
 }
@@ -7365,10 +7358,10 @@ function modalVerified(id){
     footer:`<div class="sp"></div><button class="btn" data-close="1">Отмена</button><button class="btn pri" id="m-save-v">${icon('check')} Записать</button>`,
     onMount:()=>{ $('#m-save-v').onclick = () => { const v = readFields(flds);
       if(!v.v_words){ toast('Запишите слова клиента','err'); return; }
-      const before = l.analysis.score.score;
+      const before = l.analysis.score.points;
       addVerifiedNeed(l.id, {status:v.v_status, clientWords:v.v_words, topic:v.v_topic, date:v.v_date, note:v.v_note, conf:0.95});
       const nl = leadById(l.id);
-      closeModal(); toast(`Записано. Рейтинг лида ${before} → ${nl.analysis.score.score}`,'ok'); render(); };
+      closeModal(); toast(`Записано. Рейтинг лида ${before} → ${nl.analysis.score.points}/100`,'ok'); render(); };
     }});
 }
 
@@ -7716,7 +7709,11 @@ function modalAnalysis(id){
             ${a.conf.missing.length?`<div class="xs muted mt10">Не хватает данных: ${esc(a.conf.missing.join(', '))}</div>`:''}
           </div></div>
         <div class="card"><div class="card-h">${icon('box')}<h3>Основной оффер</h3></div>
-          <div class="card-b sm"><div class="b">${esc(a.offers.primary?a.offers.primary.name:'—')}</div>
+          <div class="card-b sm">
+            <div class="xs muted b">ВЫБРАНО</div>
+            <div class="sm mt6">${l.primaryOffer?esc((offerById(l.primaryOffer)||{}).name||l.primaryOffer)+' '+esc(l.primaryOffer):'не выбрано'}${l.secondaryOffer?' · secondary '+esc(l.secondaryOffer):''}</div>
+            <div class="xs muted b mt10">РЕКОМЕНДАЦИЯ LUMO</div>
+            <div class="sm mt6">${esc(a.offers.primary?a.offers.primary.name:'—')}</div>
             ${a.offers.secondary?`<div class="xs muted mt6">Secondary: ${esc(a.offers.secondary.name)}</div>`:''}
             ${(a.offers.primary?a.offers.primary.evidence:[]).map(e=>`<div class="xs mt6">• ${esc(e.chain)} [conf ${round(e.conf,2)}]</div>`).join('')}</div></div>
       </div>
@@ -7790,14 +7787,16 @@ function modalProject(){
 }
 
 /* --- CSV --- */
-function exportCsv(){
+function exportCsv(opts){
+  /* v3.4.3 LUMO-QA-005: по умолчанию FULL canonical dataset; filtered — только явный export-csv-view */
+  const full = !(opts && opts.filtered);
   const cols = ['Company','City','Vertical','Business','Site','Scale','Сигналы покупки (0-20)','Potential (0-20)',
     'Пробел в контенте (0-30)','Service Fit (0-20)','Logistics (0-10)','Рейтинг лида (0-100)','Band','Priority / Readiness',
     'Основной оффер','Дополнительный оффер','Уверенность в оффере','Событие-повод','Почему сейчас','LPR','LPR role','Доступность ЛПР',
     'Юрлицо','INN','OGRN','Уверенность в юрлице','Counterparty Risk','Риск оплаты','Риск доступа','Закупочный риск',
     'Достоверность аудита','Потенциал повторных работ','Возможность съёмки','Отношения','Stage','Статус контакта','Коммерческий исход',
     'Last contact','Next step','Подтверждённая потребность','Website','Revenue est'];
-  const rows = filterLeads(DB.leads).map(l => { const a = l.analysis, c = a.contactability.primary, e = a.entity.data;
+  const rows = (full ? DB.leads.slice() : filterLeads(DB.leads)).map(l => { const a = l.analysis, c = a.contactability.primary, e = a.entity.data;
     const vn = (l.verifiedContentNeeds||[]).slice(-1)[0];
     return [l.name, cityOf(l.cityKey).name, a.vertical, l.subindustry||IND(l.industry).label, l.website||'', l.employees||'',
       a.score.components.buying.points, a.score.components.potential.points, a.score.components.gap.points,
@@ -7841,7 +7840,7 @@ function bindGlobal(){
 function onAct(e){
   const el = e.target.closest('[data-act]'); if(!el) return;
   const act = el.getAttribute('data-act'), id = el.getAttribute('data-id');
-  if(el.tagName==='A' && el.getAttribute('href') && !['card-tab','quick','filter-project','use-project'].includes(act)) return;
+  if(el.tagName==='A' && el.getAttribute('href') && !['card-tab','quick','filter-project','use-project','drawer-close'].includes(act)) return;
   switch(act){
     case 'new-lead': e.preventDefault(); modalLead(null); break;
     case 'edit-lead': e.preventDefault(); modalLead(id); break;
@@ -7903,7 +7902,8 @@ function onAct(e){
     case 'bulk-stage': bulkSelectModal('stage'); break;
     case 'bulk-rel': bulkSelectModal('rel'); break;
     case 'bulk-analysis': { Array.from(UI.sel).forEach(i=>{ const l=leadById(i); if(l) recalc(l); }); save(); render(); toast('Пересчитано','ok'); break; }
-    case 'export-csv': exportCsv(); break;
+    case 'export-csv': exportCsv({filtered:false}); toast('Экспортирован полный dataset: ' + DB.leads.length + ' записей', 'ok'); break;
+    case 'export-csv-view': exportCsv({filtered:true}); toast('Экспортирована текущая выборка: ' + filterLeads(DB.leads).length + ' записей', 'ok'); break;
     case 'edit-entity': e.preventDefault(); modalEntity(id); break;
     case 'adapter-headers': e.preventDefault(); modalAdapterHeaders(id); break;
     case 'footprint-paste': e.preventDefault(); modalFootprint(id||null); break;
@@ -7942,7 +7942,8 @@ function onAct(e){
       DB.ui.simpleMode = el.getAttribute('data-k') !== 'expert';
       save(); simpleApply(); render();
       break; }
-    case 'drawer-close': e.preventDefault(); closeDrawer(); break;
+    case 'drawer-close': /* v3.4.3 REG-002: закрыть drawer; якорную навигацию НЕ глушить */
+      closeDrawer(); if(!(el.tagName==='A' && el.getAttribute('href'))) e.preventDefault(); break;
     case 'lead-preview': e.preventDefault(); {
       const l = leadById(id); if(l) openDrawer(l.name, (cityOf(l.cityKey).name||'') + ' · ' + (IND(l.industry).label||''), leadPreviewHtml(id));
       break; }
@@ -8104,7 +8105,7 @@ function importCandidateAt(idx){
   const c = res.items[idx];
   if(DB.leads.some(l=>l.name===c.name && l.cityKey===c.cityKey)){ toast('Такая компания уже в базе','warn'); return; }
   const l = importCandidate(c, res.projectId);
-  toast(`Добавлено: ${l.name} · Рейтинг лида ${l.analysis.score.score}`, 'ok');
+  toast(`Добавлено: ${l.name} · Рейтинг лида ${l.analysis.score.points}`, 'ok');
   closeModal(); render();
 }
 function importAllCandidates(){
@@ -8344,9 +8345,8 @@ function boot(){
   DB = loadState();
   render();
   window.addEventListener('hashchange', () => { const v = parseHash().view;
-    /* v3.4.2: route change always dismisses transient right drawer/overlay. */
-    closeDrawer();
     if(v==='lead'){ UI.cardTab = UI.cardTab||'overview'; }
+    if(v!=='leads' && typeof closeDrawer==='function') closeDrawer();  /* v3.4.3: Back/Forward не возвращает stale drawer */
     render(); });
   document.addEventListener('keydown', e => {
     if(e.key==='Escape'){ closeModal(); $('#sidebar').classList.remove('open'); return; }
@@ -8401,19 +8401,21 @@ window.APP = {
 /* ===== part12_settings_help.js ===== */
 /* ===================== 6.7 НАСТРОЙКИ (профиль исполнителя + канон) ===================== */
 function settingsApplyTabs(){
-  const v = $('#view'); if(!v || v.querySelector('.set-tabs')) return;
+  const v = $('#view'); if(!v) return;
   UI.setTab = UI.setTab || 'profile';
   const tabs = [['profile','Профиль'],['economy','Экономика'],['method','Методика'],['sources','Источники'],['data','Данные'],['about','О приложении']];
-  const bar = document.createElement('div'); bar.className = 'set-tabs'; bar.setAttribute('role','tablist');
+  let bar = v.querySelector('.set-tabs');
+  if(!bar){ bar = document.createElement('div'); bar.className = 'set-tabs'; bar.setAttribute('role','tablist'); v.prepend(bar); }
   bar.innerHTML = tabs.map(([k,t])=>`<button class="${UI.setTab===k?'on':''}" data-act="set-tab" data-k="${k}" role="tab">${t}</button>`).join('');
-  v.prepend(bar);
   const classify = card => {
-    const h = (card.id||'') + ' ' + card.innerHTML.slice(0, 400);
-    if(card.id==='enrich-settings-card' || /adapters-reset|adapters-test|Источники данных/.test(h)) return 'sources';
+    /* v3.4.3 LUMO-QA-004: classify по полному содержимому + явные наборы keywords */
+    const h = (card.id||'') + ' ' + card.innerHTML;
+    if(card.id==='enrich-settings-card') return 'sources';
+    if(/backup|Резерв|import-file|Восстанов|Restore|Экспорт CSV|export-csv|Очистить всё|dataset|Демо-режим|demo-mode/.test(h)) return 'data';
+    if(/adapters-reset|adapters-test|Источники данных|Local Helper|SearXNG/.test(h)) return 'sources';
     if(/id="p_name"|baseCity|Профиль исполнителя|capability/.test(h)) return 'profile';
-    if(/Цена|Объём|OFFERS|rate|минимальн/.test(h)) return 'economy';
-    if(/SCORE_WEIGHTS|Вес|Канон|MASTER|readiness-правила/.test(h)) return 'method';
-    if(/backup|Резерв|Импорт|import-file|dataset|Очистить всё|demo-mode/.test(h)) return 'data';
+    if(/Цена|Объём работ|OFFERS|rate|минимальн/.test(h)) return 'economy';
+    if(/SCORE_WEIGHTS|Веса|Канон|MASTER|readiness-правила/.test(h)) return 'method';
     return 'about'; };
   v.querySelectorAll('.card').forEach(card => {
     const t = classify(card);
@@ -8501,6 +8503,7 @@ function viewSettings(){
    <div class="col">
     <div class="card"><div class="card-h"><span style="width:26px;height:26px;border-radius:7px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;flex:0 0 26px">${lumoSymbol('lumo-s20')}</span><div><h3>${BRAND.name} — ${BRAND.sub}</h3><div class="sub">${esc(BRAND.descriptor)}</div></div></div>
       <div class="card-b sm">
+        <div class="row nw mb6"><span class="b">Lumo v3.4.3</span><span class="sp"></span><span class="xs muted mono">build 2026-09-15 · single-file · storage: localStorage «ai_client_scout_v1»</span></div>
         <div class="xs muted mb6">Бренд и дизайн — из пакета миграции (BRAND/): знак «aperture + luminous star», палитра blue / cyan / violet / warm. Фавикон и app-icon встроены в файл (data-URI), офлайн.</div>
         <span class="pill" style="background:#eef3ff;color:#2b4fd0">blue ${BRAND.colors.blue}</span>
         <span class="pill" style="background:#e8f7fd;color:#0e7490">cyan ${BRAND.colors.cyan}</span>
@@ -8542,7 +8545,7 @@ function viewSettings(){
       <div class="sp"></div><a class="btn xs" href="#/sources">${icon('db')} Источники данных</a></div>
       <div class="card-b row">
         <button class="btn" data-act="export-json" title="Резервная копия: формат AI_CLIENT_SCOUT_BACKUP v1, производный анализ не сохраняется и пересчитывается при восстановлении">${icon('down')} Экспорт резервной копии</button>
-        <button class="btn" data-act="export-csv">${icon('down')} Экспорт CSV</button>
+        <button class="btn" data-act="export-csv">${icon('down')} Экспорт CSV (полный dataset)</button>
         <label class="btn" style="cursor:pointer" title="Деструктивная операция: предпросмотр счётчиков, двойной хэш и подтверждение словом «ЗАМЕНИТЬ»">${icon('up')} Восстановить из копии<input type="file" accept="application/json" id="import-file" style="display:none"></label>
         <button class="btn" data-act="dataset" data-k="real" title="10 контрольных лидов MASTER: INDUSTRIAL v0.2 и TRAVEL / HORECA v0.1">${icon('award')} Реальные лиды MASTER</button>
         <button class="btn" data-act="dataset" data-k="both" title="Реальные лиды + 20 вымышленных демо-компаний">${icon('layers')} Реальные + демо</button>
@@ -11052,10 +11055,10 @@ function importDadataAt(idx){
     toast('Такая компания уже в базе', 'warn'); return;
   }
   const l = addLead(dadataCandidateLeadData(c, res.projectId));
-  logGlobal('lead','Компания добавлена из ЕГРЮЛ (DaData)', `${l.name}, ИНН ${c._inn||'—'} · Lead Score ${l.analysis.score.score}`);
+  logGlobal('lead','Компания добавлена из ЕГРЮЛ (DaData)', `${l.name}, ИНН ${c._inn||'—'} · Lead Score ${l.analysis.score.points}`);
   c.inBase = true; c.existingLeadId = l.id;
   save(); closeModal(); render();
-  toast(`Добавлено: ${l.name} · Рейтинг лида ${l.analysis.score.score} (${l.analysis.score.tierLabel||l.analysis.score.bandLabel||''})`, 'ok', 4200);
+  toast(`Добавлено: ${l.name} · Рейтинг лида ${l.analysis.score.points} (${l.analysis.score.bandLabel||l.analysis.score.bandLabel||''})`, 'ok', 4200);
 }
 function importAllDadata(){
   const res = UI.dadataResults; if(!res) return;
@@ -11064,7 +11067,7 @@ function importAllDadata(){
     if(c.inBase) return;
     if(DB.leads.some(l => (l.entity && c._inn && String(l.entity.inn||'')===c._inn))) return;
     const l = addLead(dadataCandidateLeadData(c, res.projectId));
-    logGlobal('lead','Компания добавлена из ЕГРЮЛ (DaData)', `${l.name}, ИНН ${c._inn||'—'} · Lead Score ${l.analysis.score.score}`);
+    logGlobal('lead','Компания добавлена из ЕГРЮЛ (DaData)', `${l.name}, ИНН ${c._inn||'—'} · Lead Score ${l.analysis.score.points}`);
     c.inBase = true; c.existingLeadId = l.id; n++;
   });
   save(); render();
@@ -12236,18 +12239,26 @@ function enrichApplySel(id){
   toast(applied.length?`Записано: ${applied.join(', ')}`:'Ничего не применено', applied.length?'ok':'warn');
 }
 async function enrichRun(id, mode, btn){
+  /* v3.4.3 LUMO-QA-003: loading-state очищается на любом terminal path (finally) */
+  const origHtml = btn ? btn.innerHTML : null;
   if(btn){ btn.disabled = true; btn.textContent = 'Ищу…'; }
   try{
     const E = await enrichLead(id, mode);
-    if(btn){ btn.disabled = false; }
     const sh = E.searchHealth || {};
     if(sh.state && sh.state!=='AVAILABLE' && sh.state!=='NOT_USED' && !E.website){
       toast('Автоматический интернет-поиск сейчас ограничен. Можно повторить позже или добавить сайт вручную.', 'warn', 6000);
     } else if(!E.website && !E.socials.length){ toast(ENRICH_ERR.noresults, 'warn', 5000); }
     enrichPreviewModal(id);
   }catch(e){
-    if(btn){ btn.disabled = false; }
     toast(e && e.message ? e.message : ENRICH_ERR.net, 'err', 5200);
+  }finally{
+    if(btn){
+      btn.disabled = false;
+      const l = leadById(id);
+      if(btn.getAttribute('data-act')==='enrich-run' && l && l.enrichment && l.enrichment.last){
+        btn.innerHTML = icon('search') + ' Обновить данные';
+      } else if(origHtml != null){ btn.innerHTML = origHtml; }
+    }
   }
 }
 async function enrichTestWorker(btn){
@@ -12312,6 +12323,7 @@ function enrichSettingsInject(){
   card.insertAdjacentElement('afterend', wrap.firstElementChild);
   const inp = document.getElementById('enrich-helper-url');
   if(inp) inp.onchange = ()=>{ enrichCfg().helperUrl = inp.value.trim(); enrichCfg().status = null; save(); toast('Local Helper URL сохранён','ok'); };
+  settingsApplyTabs();   /* v3.4.3: инъекция произошла после applyTabs — переклассифицировать панели */
 }
 const _renderBaseEnrich = render;
 render = function(){ const r = _renderBaseEnrich.apply(this, arguments); try{ enrichSettingsInject(); }catch(e){} return r; };

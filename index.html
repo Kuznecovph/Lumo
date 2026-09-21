@@ -452,9 +452,14 @@ body{font-size:14px}
 .card-b{padding:16px}
 .sidebar{width:236px;flex:0 0 236px}
 .nav-sec{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:14px 12px 6px}
-.nav-item{border-radius:9px;margin:1px 8px;padding:8px 10px;color:var(--ink-2);font-weight:500}
-.nav-item.active{background:var(--acc-2);color:var(--acc-ink);font-weight:600}
-.nav-item:hover{background:var(--line-2)}
+/* v3.4.4 FIX-4 (root cause): светлые глобальные правила .nav-item из ui-refresh перебивали
+   базовые тёмные правила sidebar (тот же specificity, но позже в cascade) → активный пункт
+   становился почти белым (#eaf1fe). Sidebar изолирован: .sidebar-scope + тёмные токены.
+   Тёмный sidebar больше НЕ наследует светлые global active/hover backgrounds. */
+.sidebar .nav-item{border-radius:9px;margin:1px 8px;padding:8px 10px;color:var(--sb-ink);font-weight:500}
+.sidebar .nav-item:hover{background:var(--sb-2);color:#e5ebf3}
+.sidebar .nav-item.active{background:var(--sb-act);color:#fff;font-weight:600}
+.sidebar .nav-item.active:hover{background:var(--sb-act);color:#fff}
 .sb-cta{width:calc(100% - 20px);margin:12px 10px 6px;display:flex;align-items:center;justify-content:center;gap:8px}
 .sb-mode{margin:10px 10px 6px;display:flex;background:var(--line-2);border-radius:9px;padding:3px;gap:3px}
 .sb-mode button{flex:1;height:26px;border:0;background:transparent;border-radius:7px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer}
@@ -8503,7 +8508,7 @@ function viewSettings(){
    <div class="col">
     <div class="card"><div class="card-h"><span style="width:26px;height:26px;border-radius:7px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;flex:0 0 26px">${lumoSymbol('lumo-s20')}</span><div><h3>${BRAND.name} — ${BRAND.sub}</h3><div class="sub">${esc(BRAND.descriptor)}</div></div></div>
       <div class="card-b sm">
-        <div class="row nw mb6"><span class="b">Lumo v3.4.3</span><span class="sp"></span><span class="xs muted mono">build 2026-09-15 · single-file · storage: localStorage «ai_client_scout_v1»</span></div>
+        <div class="row nw mb6"><span class="b">Lumo v3.4.4</span><span class="sp"></span><span class="xs muted mono">build 2026-09-16 · single-file · storage: localStorage «ai_client_scout_v1»</span></div>
         <div class="xs muted mb6">Бренд и дизайн — из пакета миграции (BRAND/): знак «aperture + luminous star», палитра blue / cyan / violet / warm. Фавикон и app-icon встроены в файл (data-URI), офлайн.</div>
         <span class="pill" style="background:#eef3ff;color:#2b4fd0">blue ${BRAND.colors.blue}</span>
         <span class="pill" style="background:#e8f7fd;color:#0e7490">cyan ${BRAND.colors.cyan}</span>
@@ -11622,7 +11627,15 @@ const ENRICH_PROVIDERS = {
       let r; try{
         r = await fetch(base+'/fetch', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url})});
       }catch(e){ throw enrichFail('helper'); }
-      if(!r.ok) throw enrichFail('fetch');
+      if(!r.ok){
+        /* v3.4.4 FIX-1: диагностика отказа сохраняется (helper отдаёт fetch_timeout/fetch_http+status/fetch_network/ssrf_blocked).
+           Успешный путь и SSRF-защита не меняются. */
+        const je = await r.json().catch(()=>null);
+        const e = enrichFail('fetch');
+        e.fetchError = (je && je.error) || ('http_'+r.status);
+        e.fetchStatus = (je && je.status) || r.status;
+        throw e;
+      }
       const j = await r.json().catch(()=>null);
       if(!j || typeof j.html!=='string') throw enrichFail('fetch');
       return j;
@@ -11788,6 +11801,75 @@ function enrichNames(l){
 function enrichTokensAll(names){ return Array.from(new Set([].concat.apply([], names.map(n=>enrichTokens(n))))); }
 /* v3.2: данные с сайта не превосходят confidence сайта; но при HIGH+ сайте контакты/соцсети — не ниже 75 */
 function enrichSiteBound(siteConf, cap){ const b = Math.min(siteConf, cap); return siteConf >= 75 ? Math.max(b, 75) : b; }
+/* ===================== v3.4.4 FIX-1 / FIX-3 helpers ===================== */
+/* длина видимого текста страницы (без script/style/комментариев/разметки) — детектор «почти пустой страницы» */
+function enrichVisibleText(html){
+  return String(html||'')
+    .replace(/<script[\s\S]*?<\/script>/gi,' ')
+    .replace(/<style[\s\S]*?<\/style>/gi,' ')
+    .replace(/<!--[\s\S]*?-->/g,' ')
+    .replace(/<[^>]+>/g,' ')
+    .replace(/&(nbsp|#160);/gi,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+/* v3.4.4 FIX-1: Known website — НЕ вечная истина. Вердикт проверки известного сайта:
+   OK — открывается и подтверждает компанию;
+   STALE — технически непригоден (не резолвится, 4xx/5xx, repeated timeout, почти пустая страница);
+   UNVERIFIED — открывается, но компанию не подтверждает (нет бренда, brand/city mismatch, недостаточно evidence).
+   Пометка НЕ удаляет сайт из карточки; замена — только через явный Apply пользователя в Preview. */
+function enrichKnownSiteStatus(o){
+  const reasons = [];
+  if(!o || o.siteFetch !== 'ok'){
+    const fe = String((o && o.fetchErr && o.fetchErr.fetchError)||'');
+    const st = Number((o && o.fetchErr && o.fetchErr.fetchStatus)||0);
+    if(fe==='fetch_timeout') reasons.push('таймаут: сайт не отвечает');
+    else if(fe==='fetch_http' && st>=400 && st<500) reasons.push('сервер вернул '+st+' (4xx): страница больше не доступна');
+    else if(fe==='fetch_http' && st>=500) reasons.push('ошибка сервера ('+st+', 5xx)');
+    else if(fe==='fetch_network') reasons.push('домен не резолвится или соединение отклонено');
+    else if(fe==='ssrf_blocked') reasons.push('запрос заблокирован локальной политикой безопасности (SSRF-защита)');
+    else reasons.push('сайт не открывается (сетевая ошибка)');
+    return {status:'STALE', reasons};
+  }
+  const text = enrichVisibleText(o.html);
+  const low = String(o.html||'').toLowerCase();
+  const toks = enrichTokensAll(o.names||[]);
+  const brandHit = toks.some(t2=>t2 && low.includes(t2));
+  const xc = enrichExtractContacts(o.html||'');
+  const hasContacts = !!(xc.phones.length || xc.emails.length || xc.socials.length);
+  const dig = s=>String(s||'').replace(/\D/g,'').slice(-10);
+  const phoneHit = xc.phones.some(p=>dig(p).length===10 && (o.phonesKnown||[]).some(k2=>dig(k2)===dig(p)));
+  const cityHit = !!(o.cityName && low.includes(String(o.cityName).toLowerCase()));
+  const addr0 = String(o.addrKnown||'').split(',')[0].trim();
+  const addrHit = !!(addr0 && low.includes(addr0.toLowerCase()));
+  /* «почти пустая страница» — только если нет ни бренда, ни контактов (парковка/заглушка) */
+  if(text.length < 120 && !brandHit && !hasContacts){
+    reasons.push('почти пустая страница (видимый текст: '+text.length+' симв., бренд и контакты отсутствуют)');
+    return {status:'STALE', reasons};
+  }
+  if(!brandHit){
+    reasons.push('страница не подтверждает компанию: бренд не упомянут');
+    if(o.cityName && !cityHit) reasons.push('город «'+o.cityName+'» не упомянут — brand/city mismatch');
+    return {status:'UNVERIFIED', reasons};
+  }
+  if(!cityHit && !addrHit && !phoneHit && !hasContacts){
+    reasons.push('недостаточно evidence: бренд найден, но на странице нет города, адреса и контактов');
+    return {status:'UNVERIFIED', reasons};
+  }
+  const ok = ['сайт открывается и подтверждает компанию'];
+  if(cityHit) ok.push('город на странице');
+  if(addrHit) ok.push('адрес на странице');
+  if(phoneHit) ok.push('телефон совпал с карточкой');
+  return {status:'OK', reasons: ok};
+}
+/* v3.4.4 FIX-3: результат official-site enrichment (A) отделён от результата внешнего поиска (B):
+   true, если официальный сайт успешно дал данные */
+function enrichOfficialDataFound(E){
+  if(!E) return false;
+  if(E.siteFetch==='ok' && E.website) return true;
+  const off = f => !!(f && (f.sourceType==='OFFICIAL_SITE' || f.source==='OFFICIAL_SITE' || f.source==='OFFICIAL_SITE_LINK' || f.source==='OFFICIAL_SITE_CONTACTS' || f.source==='KNOWN_CARD'));
+  return off(E.email) || off(E.phone) || (E.socials||[]).some(off);
+}
 /* v3.3: человекочитаемые лейблы источников для Preview */
 function enrichSourceLabel(f){
   const s = String((f && (f.sourceType||f.source))||'');
@@ -11885,13 +11967,16 @@ async function enrichLead(id, mode){
 
   /* ---------- VALIDATE + OFFICIAL SITE FIRST (v3.2) ---------- */
   let siteHtml = '', siteFetch = 'none';
+  let siteFetchErr = null;   /* v3.4.4 FIX-1: диагностика последнего fetch-отказа (timeout/4xx/5xx/DNS) */
+  let knownCheck = null;     /* v3.4.4 FIX-1: вердикт проверки известного сайта (OK/STALE/UNVERIFIED) */
   const fetchWithFallback = async (url) => {
+    siteFetchErr = null;
     try{ return await SEARCH_PROVIDER.fetchPage(url); }
-    catch(e){
+    catch(e){ siteFetchErr = e;
       try{ const u = new URL(url);
         const alt = u.hostname.startsWith('www.') ? u.protocol+'//'+u.hostname.slice(4) : u.protocol+'//www.'+u.hostname;
         return await SEARCH_PROVIDER.fetchPage(alt+'/'); }
-      catch(e2){ return null; }
+      catch(e2){ siteFetchErr = e2; return null; }
     }
   };
   if(best && best.conf >= 55){
@@ -11912,7 +11997,18 @@ async function enrichLead(id, mode){
       else { best.conf = Math.max(20, best.conf - 25); best.reasons.push('страница не подтверждает бренд/город/контакты — confidence снижен'); }
       best.validated = true;
     } else { siteFetch = 'failed'; best.reasons.push('страница недоступна: не верифицирован'); }
-    if(best.source==='KNOWN_CARD' && (best.conf < 55 || siteFetch==='failed') && !searchRan){
+    /* v3.4.4 FIX-1 STALE KNOWN-SITE RECOVERY: known website проверяется каждый запуск.
+       STALE/UNVERIFIED → confidence ниже порога «найденного» сайта (в карточке сайт НЕ удаляется),
+       discovery альтернативного официального сайта продолжается; замена — только через явный Apply. */
+    if(best.source==='KNOWN_CARD'){
+      knownCheck = enrichKnownSiteStatus({siteFetch, html:siteHtml, names, cityName, addrKnown, phonesKnown, fetchErr:siteFetchErr});
+      knownCheck.value = knownSiteRaw;
+      knownCheck.host = knownCand ? knownCand.host : (knownSiteRaw ? enrichHost(knownSiteRaw) : '');
+      knownCheck.checkedAt = new Date().toISOString();
+      if(knownCheck.status==='STALE'){ best.conf = Math.min(best.conf, 45); best.reasons = best.reasons.concat(knownCheck.reasons); }
+      else if(knownCheck.status==='UNVERIFIED'){ best.conf = Math.min(best.conf, 54); best.reasons = best.reasons.concat(knownCheck.reasons); }
+    }
+    if(best.source==='KNOWN_CARD' && (best.conf < 55 || siteFetch==='failed' || (knownCheck && knownCheck.status!=='OK')) && !searchRan){
       await runSiteSearch();
       let c2 = buildCands();
       c2 = c2.concat([knownCand]);
@@ -11935,8 +12031,28 @@ async function enrichLead(id, mode){
     }
   }
 
+  /* v3.4.4 FIX-1: пометка STALE/UNVERIFIED живёт в enrichment-кеше (l.enrichment.last.knownSite) —
+     основной сайт карточки НЕ удаляется и НЕ меняется до явного Apply.
+     knownSiteFails — счётчик повторных отказов (repeated timeout и др.) по host. */
+  if(knownCheck){
+    knownCheck.alternative = (knownCheck.status!=='OK' && best && best.source!=='KNOWN_CARD') ? best.url : null;
+    l.enrichment = l.enrichment || {};
+    const kfHost = knownCheck.host || 'unknown';
+    if(knownCheck.status!=='OK'){
+      const kf = l.enrichment.knownSiteFails = l.enrichment.knownSiteFails || {};
+      kf[kfHost] = kf[kfHost] || {count:0, lastAt:null, lastStatus:null};
+      kf[kfHost].count++; kf[kfHost].lastAt = knownCheck.checkedAt; kf[kfHost].lastStatus = knownCheck.status;
+      if(kf[kfHost].count > 1){
+        const isTo = knownCheck.reasons.some(x=>/таймаут/i.test(x));
+        knownCheck.reasons.push((isTo?'повторный таймаут':'повторный отказ')+': '+kf[kfHost].count+' раз(а) подряд');
+      }
+    } else if(l.enrichment.knownSiteFails && l.enrichment.knownSiteFails[kfHost]){
+      delete l.enrichment.knownSiteFails[kfHost];   /* сайт снова здоров — счётчик сброшен */
+    }
+  }
   const E = {mode, at:new Date().toISOString(), worker:enrichWorkerUrl(), queries:0, queryLog,
-    website:null, socials:[], email:null, phone:null, evidence:[], low:[], alternatives:[], rejected:{}, siteFetch};
+    website:null, socials:[], email:null, phone:null, evidence:[], low:[], alternatives:[], rejected:{}, siteFetch,
+    knownSite: knownCheck||null};
   if(best){
     best.sourceType = 'SEARCH_RESULT'; best.sourceUrl = best.url; best.signals = best.reasons.slice();
     if(best.conf >= 55) E.website = {value:best.url, confidence:best.conf, source:best.source, sourceType:best.sourceType, sourceUrl:best.sourceUrl, signals:best.signals, reasons:best.reasons};
@@ -12107,8 +12223,12 @@ function enrichBlockHtml(l){
   const meta = enrichMetaOf(l);
   const soc = k => (meta[k]&&meta[k].value)||'';
   const lowOf = k => ((l.enrichment&&l.enrichment.last&&l.enrichment.last.low)||[]).find(x=>x.kind===k);
+  /* v3.4.4 FIX-1: пометка known-site из последнего enrichment-кеша */
+  const ks = (l.enrichment&&l.enrichment.last&&l.enrichment.last.knownSite)||null;
+  const ksBad = !!(ks && ks.status && ks.status!=='OK' && String(l.website||'') && String(ks.value||'')===String(l.website||''));
   const st = (k, value) => {
     if(value && meta[k] && meta[k].manual_confirmed) return '<span class="badge ok">✓ подтверждено</span>';
+    if(k==='website' && value && ksBad) return `<span class="badge warm" title="${esc((ks.reasons||[]).join('; '))}">! ${ks.status==='STALE'?'сайт устарел':'сайт не подтверждён'}</span>`;
     if(value) return '<span class="badge info">авто</span>';
     if(lowOf(k)) return '<span class="badge warm">! требует проверки</span>';
     return '<span class="badge gray">— не найдено</span>'; };
@@ -12122,7 +12242,11 @@ function enrichBlockHtml(l){
     : cfg.status===false ? '<span class="badge dgr">Локальный сервис: не запущен</span>'
     : '<span class="badge gray">Локальный сервис: не проверен</span>';
   const sh = (l.enrichment&&l.enrichment.last&&l.enrichment.last.searchHealth)||{};
+  /* v3.4.4 FIX-3: A) официальный сайт и B) внешний поиск — раздельные бейджи */
+  const offOk = hasLast && enrichOfficialDataFound(l.enrichment.last);
+  const shBad = !!(sh.state && sh.state!=='AVAILABLE' && sh.state!=='NOT_USED');
   const src = !hasLast ? '<span class="badge gray">источники: ещё не искал</span>'
+    : offOk ? '<span class="badge ok">данные с официального сайта</span>'+(shBad?' <span class="badge warm">внешний поиск ограничен</span>':'')
     : sh.state==='AVAILABLE' ? '<span class="badge ok">поисковые источники: доступны</span>'
     : sh.state==='NOT_USED' ? '<span class="badge ok">данные с официального сайта</span>'
     : '<span class="badge warm">поисковые источники: ограничены</span>';
@@ -12133,7 +12257,7 @@ function enrichBlockHtml(l){
   return `<div class="card mb14"><div class="card-h"><div class="ct">${icon('globe')} Контакты и присутствие в интернете</div>
       <span class="sp"></span>${svc} ${src}
       ${hasLast?`<button class="btn xs" data-act="enrich-preview" data-id="${l.id}">${icon('eye')} Последний результат</button>`:''}
-      <button class="btn xs" data-act="enrich-run-deep" data-id="${l.id}" title="сайт + соцсети + email + телефон">${icon('search')} Глубоко</button>
+      <button class="btn xs expert-only" data-act="enrich-run-deep" data-id="${l.id}" title="сайт + соцсети + email + телефон">${icon('search')} Расширенный поиск</button>
       <button class="btn xs pri" data-act="enrich-run" data-id="${l.id}">${icon('search')} ${hasLast?'Обновить данные':'Найти контакты и соцсети'}</button></div>
     <div class="card-b">
       ${row('Сайт','website', l.website||'', meta.website, l.website)}
@@ -12157,6 +12281,23 @@ function enrichPreviewModal(id){
   const l = leadById(id); if(!l) return;
   const E = l.enrichment && l.enrichment.last;
   if(!E){ toast('Сначала выполните поиск: «Найти контакты и соцсети»','warn'); return; }
+  /* v3.4.4 FIX-3: A) результат official-site enrichment и B) результат внешнего поиска — СООБЩАЮТСЯ РАЗДЕЛЬНО.
+     Ограничение внешнего поиска при успешном официальном сайте — не общий failure. */
+  const shBad = !!(E.searchHealth && E.searchHealth.state && E.searchHealth.state!=='AVAILABLE' && E.searchHealth.state!=='NOT_USED');
+  const offOk = enrichOfficialDataFound(E);
+  const shDetail = shBad ? `Состояние: ${esc(E.searchHealth.state)}${(E.searchHealth.unresponsive||[]).length?` · движки на паузе (cooldown): ${esc(E.searchHealth.unresponsive.join(', '))}`:''}` : '';
+  const healthCallout = !shBad ? '' : (offOk
+    ? `<div class="callout ok mt10"><div class="ct">${icon('check')} Основные данные найдены с официального сайта</div>
+        <div class="xs faint mt4" style="color:var(--muted)">Дополнительный поиск по внешним источникам временно ограничен. ${shDetail} — на уже найденные данные это не влияет; при желании повторите поиск позже.</div></div>`
+    : `<div class="callout warn mt10"><div class="ct">${icon('alert')} Автоматический интернет-поиск сейчас ограничен</div>
+        <div class="xs">${shDetail}. Можно повторить позже или добавить сайт вручную; остальные источники (официальный сайт, каталоги) проверяются как обычно.</div></div>`);
+  /* v3.4.4 FIX-1: known site STALE/UNVERIFIED — пометка видна в Preview; сайт не удалён, замена только через Apply */
+  const ksC = E.knownSite;
+  const knownSiteCallout = (ksC && ksC.status && ksC.status!=='OK')
+    ? `<div class="callout warn mt10"><div class="ct">${icon('alert')} Известный сайт помечен: ${ksC.status==='STALE'?'STALE (устарел)':'UNVERIFIED (не подтверждён)'}</div>
+        <div class="xs"><b>${esc(ksC.value||'')}</b>${(ksC.reasons||[]).length?` · ${esc(ksC.reasons.join('; '))}`:''}.
+        Сайт НЕ удалён из карточки.${ksC.alternative?` Найден альтернативный кандидат официального сайта: <b>${esc(ksC.alternative)}</b> — см. поле «Сайт» выше; замена только после «Применить выбранные».`:' Если альтернатива не найдена — укажите сайт в карточке вручную и повторите поиск.'}</div></div>`
+    : '';
   const rows = [];
   const mk = (key, label, found) => {
     const cur = enrichCurrentOf(l, key);
@@ -12191,9 +12332,8 @@ function enrichPreviewModal(id){
         ${Object.keys(E.rejected||{}).length?`<div class="xs faint mt6">Альтернативы контактов: ${Object.keys(E.rejected).map(k=>esc(k)+': '+E.rejected[k].map(x=>esc(x.value)+' ('+x.confidence+'%, '+esc(x.reason)+')').join(', ')).join(' · ')}</div>`:''}
       </div></details>`:''}
       ${E.siteFetch==='failed'?`<div class="xs mt6" style="color:var(--warm)">Главная страница официального кандидата не загрузилась — контакты сняты только из выдачи.</div>`:''}
-      ${E.searchHealth && E.searchHealth.state && E.searchHealth.state!=='AVAILABLE' && E.searchHealth.state!=='NOT_USED'?`<div class="callout warn mt10"><div class="ct">${icon('alert')} Автоматический интернет-поиск сейчас ограничен</div>
-        <div class="xs">Состояние: ${esc(E.searchHealth.state)}${(E.searchHealth.unresponsive||[]).length?` · движки на паузе (cooldown): ${esc(E.searchHealth.unresponsive.join(', '))}`:''}.
-        Можно повторить позже или добавить сайт вручную; остальные источники (официальный сайт, каталоги) проверяются как обычно.</div></div>`:''}
+      ${knownSiteCallout}
+      ${healthCallout}
       ${(E.alternatives||[]).length?`<div class="xs faint mt10">Альтернативные кандидаты сайта (не применены): ${E.alternatives.map(a=>esc(a.value)+' ('+a.confidence+'%)').join(' · ')}</div>`:''}`,
     footer:`<div class="sp"></div><button class="btn" data-close="1">Отменить</button>
       <button class="btn pri" data-act="enrich-apply" data-id="${l.id}">${icon('check')} Применить выбранные</button>`,
@@ -12245,9 +12385,11 @@ async function enrichRun(id, mode, btn){
   try{
     const E = await enrichLead(id, mode);
     const sh = E.searchHealth || {};
-    if(sh.state && sh.state!=='AVAILABLE' && sh.state!=='NOT_USED' && !E.website){
+    /* v3.4.4 FIX-3: ограничение внешнего поиска — НЕ общий failure, если официальный сайт дал данные */
+    const offOk = enrichOfficialDataFound(E);
+    if(sh.state && sh.state!=='AVAILABLE' && sh.state!=='NOT_USED' && !offOk){
       toast('Автоматический интернет-поиск сейчас ограничен. Можно повторить позже или добавить сайт вручную.', 'warn', 6000);
-    } else if(!E.website && !E.socials.length){ toast(ENRICH_ERR.noresults, 'warn', 5000); }
+    } else if(!offOk && !E.website && !E.socials.length && !E.email && !E.phone){ toast(ENRICH_ERR.noresults, 'warn', 5000); }
     enrichPreviewModal(id);
   }catch(e){
     toast(e && e.message ? e.message : ENRICH_ERR.net, 'err', 5200);

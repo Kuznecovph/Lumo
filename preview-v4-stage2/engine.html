@@ -6753,82 +6753,23 @@ function tabHistory(l){
 /* ===== part07d.js ===== */
 /* ===================== 6.6 DISCOVERY ===================== */
 function viewDiscovery(r){
-  const projectId = decodeRouteParam(r.params[1]||'');  /* v3.4.8 SEC-01 */
-  setTopbar('Поиск компаний', 'Отрасль, регион и тип организации — первый слой; остальное в «Расширенных параметрах»',
-    `<button class="btn sm gh" data-act="discovery-help" title="Как работает поиск">${icon('help')}</button>
-     <button class="btn pri" data-act="new-project">${icon('plus')} Новый проект поиска</button>`);
-  const q = UI.discoveryDraft || (UI.discoveryDraft = {name:'', industry:'manufacturing', region:'udmurtia', radiusKm:100,
-    minEmployees:20, maxEmployees:500, count:12, types:[], notes:'', projectId: projectId||''});
-  if(projectId && !q.projectId) q.projectId = projectId;
-  const proj = q.projectId ? projectById(q.projectId) : null;
-  if(proj){ q.industry = q.industry||proj.industry; q.region = q.region||proj.region; q.radiusKm = q.radiusKm||proj.radiusKm; q.minEmployees = q.minEmployees||proj.minEmployees; }
-
-  const regionCities = (REGIONS.find(x=>x.id===q.region)||REGIONS[0]).cities;
-
+  /* Lumo 4.0 Stage 2: единая точка поиска. Старый Discovery генерирует
+     SIMULATED-кандидатов; формы и результаты этого генератора здесь скрыты.
+     Оригинальная функция runDiscovery оставлена для обратной совместимости,
+     но недоступна через интерфейс этого тестового превью. */
+  setTopbar('Поиск компаний', 'Реальные организации из ЕГРЮЛ через DaData — один поиск для новых компаний.');
   $('#view').innerHTML = `
-  ${DB.ui.demoMode?`<div class="demo-banner">${icon('alert')}<div><b>Демо-генератор.</b> В этом прототипе Discovery не обращается к внешним источникам: он генерирует правдоподобные, но <u>вымышленные</u> компании, чтобы показать, как выглядит полный цикл работы с лидом. Такие записи помечаются <b>SIMULATED</b>, получают пониженный Достоверность аудита и статус «требуется проверка». В продуктовой версии этот блок заменяется на реальные источники: реестры юрлиц, карты и агрегаторы, поиск по сайтам, вакансии, новости, отраслевые каталоги.</div></div>`:''}
-
-  <div class="grid g-2-1">
-    <div class="col">
-      <div class="card"><div class="card-h">${icon('search')}<div><h3>Параметры поиска</h3><div class="sub">шаг 1 — задать отрасль, географию, тип и размер бизнеса</div></div></div>
-        <div class="card-b"><div class="grid g2">
-          ${fieldHtml({id:'d_name', label:'Название проекта поиска', value:q.name, placeholder:'Например: Производственные предприятия в Удмуртии'})}
-          ${fieldHtml({id:'d_project', label:'Существующий проект', type:'select', value:q.projectId,
-            options:[{v:'',t:'— новый проект —'}].concat(DB.projects.map(p=>({v:p.id,t:p.name})))})}
-          ${fieldHtml({id:'d_industry', label:'Отрасль', type:'select', value:q.industry, options:Object.keys(INDUSTRIES).map(k=>({v:k,t:INDUSTRIES[k].label}))})}
-          ${fieldHtml({id:'d_region', label:'Регион', type:'select', value:q.region, options:REGIONS.map(x=>({v:x.id,t:x.label}))})}
-          ${fieldHtml({id:'d_cities', label:'Города (можно несколько)', type:'checkboxGroup', value:(q.cities||[]).join(','), options:regionCities.map(c=>({v:c,t:cityOf(c).name}))})}
-          ${fieldHtml({id:'d_radius', label:'Радиус от базы, км', type:'number', value:q.radiusKm, min:5, max:1500})}
-          ${fieldHtml({id:'d_minEmp', label:'Сотрудников от', type:'number', value:q.minEmployees, min:1})}
-          ${fieldHtml({id:'d_maxEmp', label:'Сотрудников до', type:'number', value:q.maxEmployees, min:1})}
-          ${fieldHtml({id:'d_count', label:'Сколько компаний найти', type:'number', value:q.count, min:4, max:24})}
-          ${fieldHtml({id:'d_types', label:'Тип бизнеса', type:'checkboxGroup', value:(q.types||[]).join(','),
-            options:[{v:'b2b',t:'B2B'},{v:'b2c',t:'B2C'},{v:'production',t:'Производство'},{v:'objects',t:'Объекты/площадки'},{v:'services',t:'Услуги'}]})}
-          ${fieldHtml({id:'d_notes', label:'Уточнения к запросу', type:'textarea', value:q.notes, rows:2, style:'grid-column:1/-1',
-            placeholder:'Например: только с активным наймом; исключить госкомпании; интересуют объекты с собственным производством'})}
-        </div>
-        <div class="row mt14"><button class="btn pri" data-act="run-discovery">${icon('play')} Найти компании</button>
-          <span class="xs muted">Результат детерминирован: одинаковые параметры дают одинаковый список</span></div></div></div>
-
-      ${dadataSearchCardHtml()}
-      <div id="dd-results">${dadataResultsHtml()}</div>
-      <div class="mt14" id="disc-results">${discoveryResultsHtml()}</div>
+    <div class="callout" style="margin-bottom:14px">
+      <div class="ct">Поиск реальных компаний</div>
+      Здесь находятся новые организации из DaData. Чтобы найти компанию, которая уже добавлена,
+      откройте раздел «Компании» в главном меню Lumo 4.0.
+      В этом тестовом превью изменения в поиске сохраняются в отдельной базе.
     </div>
-
-    <div class="col">
-      <div class="card"><div class="card-h">${icon('layers')}<div><h3>Проекты поиска</h3><div class="sub">${DB.projects.length} проектов</div></div></div>
-        <div class="card-b tight">${DB.projects.length?DB.projects.map(p=>{
-          const n = DB.leads.filter(l=>l.projectId===p.id).length;
-          return `<div style="padding:10px 6px;border-bottom:1px solid var(--line-2)">
-            <div class="row nw"><div class="b sm" style="flex:1">${esc(p.name)}</div><span class="badge gray">${n} лидов</span></div>
-            <div class="xs muted mt6">${esc(IND(p.industry).label)} · ${esc((REGIONS.find(r=>r.id===p.region)||{label:'—'}).label)} · радиус ${p.radiusKm||'—'} км · от ${p.minEmployees||'—'} сотр.</div>
-            ${p.notes?`<div class="xs mt6" style="color:var(--ink-2)">${esc(p.notes)}</div>`:''}
-            <div class="row mt6"><button class="btn xs" data-act="use-project" data-id="${esc(p.id)}">${icon('search')} Искать в этом проекте</button>
-              <button class="btn xs gh" data-act="filter-project" data-id="${esc(p.id)}">Лиды проекта</button></div></div>`; }).join('')
-          :'<div class="sm muted" style="padding:6px">Проектов нет.</div>'}</div></div>
-
-      <div class="card"><div class="card-h">${icon('info')}<div><h3>Как устроен Discovery</h3></div></div>
-        <div class="card-b sm" style="line-height:1.75;color:var(--ink-2)">
-          <b>Шаг 1.</b> Запрос: вертикаль + отрасль + география + тип + размер + уточнения.<br>
-          <b>Шаг 2.</b> Несколько независимых источников: официальные сайты, отраслевые каталоги, карты, выставки, ассоциации, СМИ, открытые реестры, соцсети.<br>
-          <b>Шаг 3.</b> Отсечь дубли, закрытые организации, неподходящие компании, <u>посредников вместо производителей</u> и каталоги вместо самих компаний.<br>
-          <b>Шаг 4.</b> Qualification: 9 вопросов — чем занимается, где, соответствие отрасли, реальный тип бизнеса, признаки деятельности, масштаб, задачи под визуальный контент, сигналы маркетинговых инвестиций, соответствие услугам исполнителя.<br>
-          <b>Шаг 5.</b> Подтверждение каналов: подтвердить принадлежность сайта и соцсетей (взаимные ссылки, телефоны, домен, адрес, реквизиты, юрлицо). Не приписывать аккаунт по совпадению названия.<br>
-          <b>Шаг 6.</b> Импорт в базу с источником и уровнем уверенности → глубокий аудит только для TOP. <b>Не делать Глубокий аудит слабых лидов.</b>
-          <div class="hintbox mt10">Каждая найденная компания приходит с <b>Discovery Confidence</b>. Низкая уверенность снижает Достоверность аудита и удерживает лид в HOLD/VERIFY —
-            но <u>не</u> превращается в Пробел в контенте: «нет данных» ≠ «есть пробел».</div>
-        </div></div>
-    </div>
-  </div>`;
+    ${dadataSearchCardHtml()}
+    <div id="dd-results">${dadataResultsHtml()}</div>
+  `;
   bindChecks(document);
   bindDadataFields();
-  const save = () => { const v = readFields([{id:'d_name'},{id:'d_project'},{id:'d_industry'},{id:'d_region'},{id:'d_radius',type:'number'},
-      {id:'d_minEmp',type:'number'},{id:'d_maxEmp',type:'number'},{id:'d_count',type:'number'},{id:'d_notes'},
-      {id:'d_cities',type:'checkboxGroup'},{id:'d_types',type:'checkboxGroup'}]);
-    UI.discoveryDraft = Object.assign(q, {name:v.d_name, projectId:v.d_project, industry:v.d_industry, region:v.d_region,
-      radiusKm:v.d_radius, minEmployees:v.d_minEmp, maxEmployees:v.d_maxEmp, count:v.d_count, notes:v.d_notes, cities:v.d_cities, types:v.d_types}); };
-  $$('#view input, #view select, #view textarea').forEach(el => { el.onchange = save; });
-  bindDadataFields(); /* после общего save: обработчики полей DaData имеют приоритет над демо-черновиком */
   bindGlobal();
 }
 function discoveryResultsHtml(){

@@ -1204,6 +1204,98 @@ const CITIES = {
   berezniki:       {name:'Березники', region:'Пермский край', lat:56.86, lon:56.83, pop:140000},
 };
 const cityOf = k => CITIES[k] || {name:k||'—', region:'', lat:null, lon:null};
+/* v3.5.1 IA-02: фактический населённый пункт лида/кандидата. Приблизительный ключ
+   (cityApprox/geo.approx — деревня/село/посёлок вне справочника CITIES) НЕ подменяется
+   названием регионального центра: возвращается сохранённое название НП из geo-модели.
+   Легаси-карточки без geo ведут себя точно как раньше (cityOf). */
+function actualCityName(o){
+  const g = o && o.geo;
+  if(g && g.localityName && (o.cityApprox || g.approx)) return String(g.localityName);
+  return cityOf(o && o.cityKey).name;
+}
+/* v3.5.1 IA-02: одноимённые поселения/компании разных районов и регионов НЕ отождествляются
+   без дополнительного идентификатора (ИНН/hid). Используется дедупликацией DaData и импортом. */
+function geoSettlementConflict(a, b){
+  const ga = a && a.geo, gb = b && b.geo;
+  if(!ga || !gb || !ga.localityName || !gb.localityName) return false;
+  if(enrichNormLocality(ga.localityName) !== enrichNormLocality(gb.localityName)) return true;
+  if(ga.district && gb.district && String(ga.district).toLowerCase() !== String(gb.district).toLowerCase()) return true;
+  if(ga.regionId && gb.regionId && ga.regionId !== gb.regionId) return true;
+  return false;
+}
+/* ===================== v3.5.2 IA-03 (Task 04B, P1): ЕДИНЫЙ RESOLVER ИДЕНТИЧНОСТИ DaData =====================
+   Исходы для пары (кандидат ↔ лид базы):
+     match     — идентичность ПОДТВЕРЖДЕНА: одинаковый валидный ИНН (innValid) или одинаковый
+                 реестровый hid DaData. existingLeadId допустим только при match.
+     distinct  — ТОЧНО РАЗНЫЕ организации: два разных валидных ИНН (даже при совпадении имени/НП —
+                 никогда не мержить и не связывать), разные hid, либо (идентификаторов недостаточно)
+                 явное расхождение географии (НП/район/регион — geoSettlementConflict), либо разные имена.
+     ambiguous — данных для автоматического решения НЕДОСТАТОЧНО (имена совпадают, но нет
+                 подтверждённых идентификаторов; география совпала или неизвестна). Только явное
+                 подтверждение пользователем; автоматический existingLeadId запрещён.
+   Правила (ТЗ 04B §2): разные валидные ИНН → distinct; один валидный ИНН → match;
+   идентификатор только у одного участника → имя НЕ является достоверной идентичностью;
+   валидность ИНН проверяется штатным innValid(); «уже в базе» без match не показывается. */
+function dadataIdentityResolve(cand, lead){
+  const cin = String((cand && (cand._inn || (cand.entity && cand.entity.inn)) || '')).replace(/\D/g,'');
+  const lin = String(((lead && lead.entity && lead.entity.inn) || (lead && lead._inn) || '')).replace(/\D/g,'');
+  const cValid = (cin.length===10 || cin.length===12) && innValid(cin);
+  const lValid = (lin.length===10 || lin.length===12) && innValid(lin);
+  if(cValid && lValid){
+    return cin===lin ? {verdict:'match', by:'inn', reason:'тот же валидный ИНН'}
+                     : {verdict:'distinct', by:'inn', reason:'разные валидные ИНН — это разные организации'};
+  }
+  const chid = String((cand && cand._hid) || '');
+  const lhid = String(((lead && lead.registryProfile && lead.registryProfile.hid) || (lead && lead._hid) || ''));
+  if(chid && lhid){
+    return chid===lhid ? {verdict:'match', by:'hid', reason:'тот же реестровый идентификатор DaData (hid)'}
+                       : {verdict:'distinct', by:'hid', reason:'разные реестровые hid — это разные организации'};
+  }
+  if(normNameKey(cand && cand.name) !== normNameKey(lead && lead.name))
+    return {verdict:'distinct', by:'name', reason:'разные названия компаний'};
+  /* имя совпало, подтверждённых идентификаторов нет (правило 4) — решает география (правило 3) */
+  if(geoSettlementConflict(lead, cand))
+    return {verdict:'distinct', by:'geo', reason:'название совпадает, но населённый пункт/район/регион различаются'};
+  return {verdict:'ambiguous', by:'name',
+    reason:'название совпадает, но нет ИНН/hid для подтверждения идентичности — требуется ручная проверка'};
+}
+/* v3.5.2 IA-03: единая точка сверки кандидата со ВСЕЙ базой (используется дедупликацией,
+   импортом по одному/пакетом и обогащением — согласованные решения во всех четырёх местах). */
+function dadataFindInBase(c){
+  const cin = String((c && (c._inn || (c.entity && c.entity.inn)) || '')).replace(/\D/g,'');
+  if((cin.length===10 || cin.length===12) && innValid(cin)){
+    const byInn = DB.leads.find(l => { const i = String((l.entity && l.entity.inn || '')).replace(/\D/g,'');
+      return (i.length===10 || i.length===12) && innValid(i) && i===cin; });
+    if(byInn) return {verdict:'match', lead:byInn, reason:'тот же валидный ИНН'};
+  }
+  const chid = String((c && c._hid) || '');
+  if(chid){
+    /* v3.5.3 IA-04 (Task 04C): совпадение строк hid само по себе НЕ является идентичностью —
+       найденный лид сверяется единым resolver'ом. Разные валидные ИНН → всегда distinct
+       (hid их не перекрывает); match возможен только при общем verdict==='match'. */
+    const byHid = DB.leads.find(l => String((l.registryProfile && l.registryProfile.hid) || '')===chid);
+    if(byHid){
+      const v = dadataIdentityResolve(c, byHid);
+      if(v.verdict==='match') return {verdict:'match', lead:byHid,
+        reason: v.by==='hid' ? 'тот же реестровый hid' : v.reason};
+      if(v.verdict==='distinct') return {verdict:'distinct', lead:null,
+        reason:'hid совпал, но '+v.reason};
+      return {verdict:'ambiguous', lead:byHid, reason:'hid совпал, но '+v.reason};
+    }
+  }
+  const nk = normNameKey(c && c.name);
+  const sameName = DB.leads.filter(l => normNameKey(l.name) === nk);
+  let amb = null;
+  for(const l of sameName){
+    const v = dadataIdentityResolve(c, l);
+    if(v.verdict==='match') return {verdict:'match', lead:l, reason:v.reason};
+    if(v.verdict==='ambiguous' && !amb) amb = {lead:l, reason:v.reason};
+  }
+  if(amb) return {verdict:'ambiguous', lead:amb.lead, reason:amb.reason};
+  return {verdict:'distinct', lead:null,
+    reason: sameName.length ? 'одноимённая компания в базе — другая организация (ИНН/hid/география не совпали)'
+                            : 'совпадений в базе нет'};
+}
 
 const REGIONS = [
   /* Домашний блок: Удмуртия, соседи, столицы — всегда первые в списках выбора */
@@ -3519,7 +3611,11 @@ function scopeTemplate(offerId, tier){
 }
 function canonPricing(lead, offerId, tier, canon, profile){
   const scope = scopeTemplate(offerId, tier||'standard');
-  const distKm = canon.distKm!=null ? canon.distKm : distanceKm(cityOf(profile.baseCity), cityOf(lead.cityKey));
+  /* v3.5.1 IA-02: canon.distKm===null (география неизвестна) больше НЕ пересчитывается от
+     приблизительного ключа; fallback сохранён только для вызовов без canon.distKm и тоже
+     уважает cityApprox/geo.approx. */
+  const distKm = (canon && canon.distKm!==undefined) ? canon.distKm
+    : ((lead && (lead.cityApprox || (lead.geo && lead.geo.approx))) ? null : distanceKm(cityOf(profile.baseCity), cityOf(lead.cityKey)));
   /* 1. Alexander Work */
   const workDays = Math.max(0.5, scope.days);
   const dayRate = workDays>=2 ? ECONOMICS.alexanderDay.working[1] : ECONOMICS.alexanderDay.working[0];
@@ -3554,6 +3650,8 @@ function canonPricing(lead, offerId, tier, canon, profile){
   const alexanderPersonal = alexanderWork;
   const personalOk = alexanderPersonal >= (workDays<=1.5 ? 45000 : 60000);
   return {offerId, tier, scope, distKm,
+    logisticsUnknown: distKm==null,   /* v3.5.1 IA-02: командировочная смета неизвестна до разрешения географии */
+    logisticsNote: distKm==null ? 'Расстояние неизвестно: логистика в цену не включена — координаты регионального центра не подменяют координаты неизвестного населённого пункта; уточните географию вручную.' : '',
     breakdown:{alexanderWork, alexanderDetail:{workDays, dayRate, prepH:scope.prepH, prepCost, postH:scope.postH, postCost},
       contractors, reserve, reserveRate:(contractors>20000?0.20:0.15), logistics, logisticsDetail:{fuelL:round(fuelL,1), fuel, driveH, driveCost, wear, accommodation},
       costBase},
@@ -3570,7 +3668,7 @@ function deepAuditOutput(lead, canon, profile){
   const a = canon, l = lead;
   const sec = [];
   const P = (title, body) => sec.push({title, body});
-  P('Проверка компании и бизнеса', `${l.name}${l.subindustry?' — '+l.subindustry:''}. ${cityOf(l.cityKey).name}, ${cityOf(l.cityKey).region}. ${l.employees||'—'} сотрудников, выручка (оценка) ${l.revenueEst?money(l.revenueEst):'не указана'}. Verification Confidence: ${a.entity.confidence}.`);
+  P('Проверка компании и бизнеса', `${l.name}${l.subindustry?' — '+l.subindustry:''}. ${actualCityName(l)}, ${cityOf(l.cityKey).region}. ${l.employees||'—'} сотрудников, выручка (оценка) ${l.revenueEst?money(l.revenueEst):'не указана'}. Verification Confidence: ${a.entity.confidence}.`);
   P('Цифровой след', `Сайт: ${l.website||'нет'}${a.raw.facts.siteLastUpdate?', обновлён '+fmtDate(a.raw.facts.siteLastUpdate):''}. Соцсети: ${(a.raw.facts.social||[]).join(', ').toUpperCase()||'не найдены'}, последняя публикация ${fmtDate(a.raw.facts.socialLastPost)}. Карточки на картах/агрегаторах: ${a.raw.facts.cardsPresent?'заведены':'нет'}, актуальность: ${a.raw.facts.cardsFresh?'да':'нет'}. Принадлежность каналов подтверждена через: ${(l.digitalDiscovery&&l.digitalDiscovery.length?l.digitalDiscovery.join(', '):'не проверялась — Подтверждение каналов не выполнен')}.`);
   P('Что уже делают хорошо', a.raw.gap.strongInhouse ? 'Регулярно производят большой объём свежего контента собственными силами (инхаус-ресурс). Есть видео в соцсетях, каталог поддерживается.' : (a.raw.audit.overall>=60 ? `Аудит контента ${a.raw.audit.overall}/100: ${a.raw.audit.verdict}` : 'Явно сильных сторон в контенте не выявлено — требуется проверка, а не домысливание.'));
   P('Сигналы покупки контента', `${a.score.components.buying.points}/20; сильных сигналов: ${a.score.components.buying.strongCount}. ${a.score.components.buying.breakdown.map(b=>b.label+' ('+b.fact+')').join('; ')||'Сигналов не найдено.'}`);
@@ -4337,7 +4435,11 @@ function analyzeLead(lead, profile){
   f.hasWebsite = f.hasWebsite!=null ? f.hasWebsite : (lead.website ? true : (lead.footprintUnknown ? null : false));
   const ind = IND(lead.industry);
   LEAD_CTX = {industry: lead.industry, lead};
-  const distKm = distanceKm(cityOf(profile.baseCity), cityOf(lead.cityKey));
+  /* v3.5.1 IA-02: приближённый город (НП вне справочника) — расстояние/транспорт/командировочная
+     смета НЕИЗВЕСТНЫ до разрешения точной географии; координаты столицы региона не подменяют
+     координаты деревни (канонный путь «география не определена»: distKm=null). */
+  const geoApprox = !!(lead.cityApprox || (lead.geo && lead.geo.approx));
+  const distKm = geoApprox ? null : distanceKm(cityOf(profile.baseCity), cityOf(lead.cityKey));
 
   const conf = auditConfidence(f, lead, 0);
   const audit = contentAudit(f, ind);
@@ -5311,7 +5413,7 @@ function filterLeads(list){
     if(f.quick==='lowconf') out = out.filter(l => l.analysis.conf.level!=='HIGH');
   }
   if(f.q){ const q = f.q.toLowerCase();
-    out = out.filter(l => [l.name, l.subindustry, IND(l.industry).label, cityOf(l.cityKey).name, l.description,
+    out = out.filter(l => [l.name, l.subindustry, IND(l.industry).label, actualCityName(l), l.description,
       (l.analysis.offers.primary||{}).name, (l.entity||{}).inn, (l.entity||{}).contractingLegalEntity,
       (l.contacts||[]).map(c=>c.name).join(' ')].join(' ').toLowerCase().includes(q)); }
   if(f.industry) out = out.filter(l => l.industry===f.industry);
@@ -5333,7 +5435,7 @@ function filterLeads(list){
 function sortLeads(list){
   const {key, dir} = UI.sort;
   const get = l => ({
-    name:l.name, industry:IND(l.industry).label, city:cityOf(l.cityKey).name, relationship:l.relationship,
+    name:l.name, industry:IND(l.industry).label, city:actualCityName(l), relationship:l.relationship,
     stage:PIPE_C_IDS.indexOf(l.stage), score:l.analysis.score.points, tier:SCORE_MODEL.bands.findIndex(b=>b.id===l.analysis.score.band),
     readiness:l.analysis.readiness.state, contactability:l.analysis.contactability.level, vertical:verticalOf(l),
     legal:{RESOLVED:3,PARTIAL:2,VERIFY:1,NOT_RESOLVED:0}[l.analysis.entity.status],
@@ -5473,7 +5575,7 @@ function viewDashboard(){
       : state==='READY' ? (((a.verifiedNeed||{}).confirmed||[])[0] ? 'потребность подтверждена' : '') : '';
     const next = l.nextStep || (state==='READY' ? 'Написать первое письмо' : 'Разобрать проверку');
     return `<div class="next-row">
-      <div style="min-width:0"><div class="co">${esc(l.name)}</div><div class="sub">${esc(cityOf(l.cityKey).name)} · ${esc(IND(l.industry).label)}</div></div>
+      <div style="min-width:0"><div class="co">${esc(l.name)}</div><div class="sub">${esc(actualCityName(l))} · ${esc(IND(l.industry).label)}</div></div>
       <div>${readyBadge(state)}</div>
       <div class="xs">${why?esc(String(why).slice(0,90)):'<span class="faint">—</span>'}</div>
       <div class="xs ${block?'':'faint'}">${block?esc(String(block).slice(0,90)):'ничего не мешает'}</div>
@@ -5557,7 +5659,7 @@ function tableHtml(list){
       case 'next': return `<td class="xs">${l.nextStep?`<span style="color:var(--warm)">${esc(String(l.nextStep).slice(0,70))}</span>`:'<span class="faint">—</span>'}</td>`;
       case 'last': return `<td class="xs nowrap">${l.lastContactAt?`${fmtDate(l.lastContactAt)}<div class="faint">${relDays(l.lastContactAt)}</div>`:'<span class="faint">—</span>'}</td>`;
       case 'vertical': return `<td class="xs">${esc(a.vertical)}</td>`;
-      case 'city': return `<td class="xs nowrap">${esc(cityOf(l.cityKey).name)}${a.distKm!=null?`<div class="faint">${a.distKm} км</div>`:''}</td>`;
+      case 'city': return `<td class="xs nowrap">${esc(actualCityName(l))}${a.distKm!=null?`<div class="faint">${a.distKm} км</div>`:''}</td>`;
       case 'legal': return `<td>${legalBadge(a.entity)}</td>`;
       case 'contactability': return `<td>${contactBadge(a.contactability.level)}</td>`;
       case 'offer': return `<td class="xs">${esc(a.offers.primary?a.offers.primary.name:'—')}${a.offers.secondary?`<div class="faint">+ ${esc(a.offers.secondary.name)}</div>`:''}</td>`;
@@ -5596,7 +5698,7 @@ function kanbanHtml(list){
         return `<div class="kcard" draggable="true" data-id="${esc(l.id)}">
           <div class="row nw" style="gap:6px"><div class="co-logo co-sm">${initials(l.name)}</div>
           <div class="n">${esc(l.name)}</div></div>
-          <div class="m">${esc(a.vertical)} · ${esc(cityOf(l.cityKey).name)}${a.distKm!=null?' · '+a.distKm+' км':''}</div>
+          <div class="m">${esc(a.vertical)} · ${esc(actualCityName(l))}${a.distKm!=null?' · '+a.distKm+' км':''}</div>
           <div class="f"><span class="badge ${b.cls}"><span class="dot"></span>${a.score.points}</span>${readyBadge(a.readiness.state)}</div>
           <div class="f">${legalBadge(a.entity)}${contactBadge(a.contactability.level)}</div>
           <div class="m">${esc(a.offers.primary?a.offers.primary.name:'оффер не назначен')}</div>
@@ -5618,7 +5720,7 @@ function bindLeadsBody(){
     body.innerHTML = DB.ui.viewMode==='kanban'?kanbanHtml(filterLeads(activeLeads())):tableHtml(filterLeads(activeLeads())); bindLeadsBody(); });
   $$('tr[data-id]', body).forEach(tr => tr.onclick = e => { if(e.target.closest('input,button,a')) return;
     const id = tr.getAttribute('data-id'); const l = leadById(id); if(!l) return;
-    openDrawer(l.name, (cityOf(l.cityKey).name||'')+' · '+(IND(l.industry).label||''), leadPreviewHtml(id)); });
+    openDrawer(l.name, (actualCityName(l)||'')+' · '+(IND(l.industry).label||''), leadPreviewHtml(id)); });
   $$('.kcard', body).forEach(c => {
     c.ondragstart = e => { e.dataTransfer.setData('text/plain', c.getAttribute('data-id')); c.classList.add('drag'); };
     c.ondragend = () => c.classList.remove('drag'); });
@@ -5666,7 +5768,7 @@ function priorityCard(l){
       <div style="flex:1;min-width:0">
         <div class="row nw"><a class="co-name lg" href="#/lead/${encodeURIComponent(l.id)}">${esc(l.name)}</a>
           <span class="badge acc">${esc(a.vertical)}</span>${relBadge(l.relationship)}${readyBadge(a.readiness.state)}</div>
-        <div class="co-meta">${esc(IND(l.industry).label)} · ${esc(cityOf(l.cityKey).name)}${a.distKm!=null?', '+a.distKm+' км':''} · ${l.employees!=null?esc(l.employees):'?'} сотр. · ${esc(PIPEC[l.stage]?PIPEC[l.stage].short:l.stage)}</div>
+        <div class="co-meta">${esc(IND(l.industry).label)} · ${esc(actualCityName(l))}${a.distKm!=null?', '+a.distKm+' км':''} · ${l.employees!=null?esc(l.employees):'?'} сотр. · ${esc(PIPEC[l.stage]?PIPEC[l.stage].short:l.stage)}</div>
         <div class="sm mt10" style="color:var(--ink-2);line-height:1.55">${esc(a.summary)}</div>
         <div class="row mt10">${riskLayerBadges(a.risks)}</div>
         <div class="row mt6">${legalBadge(a.entity)}${contactBadge(a.contactability.level)}
@@ -5716,7 +5818,7 @@ function viewGates(){
       return `<div class="card"><div class="card-b">
         <div class="row nw"><a class="co-name" href="#/lead/${encodeURIComponent(l.id)}">${esc(l.name)}</a><span class="badge acc">${esc(a.vertical)}</span>
           <div class="sp"></div><span class="badge ${bandMeta(a.score.band).cls}">Score ${a.score.points}</span>${readyBadge(a.readiness.state)}</div>
-        <div class="co-meta">${esc(cityOf(l.cityKey).name)} · ${esc(a.offers.primary?a.offers.primary.name:'оффер не назначен')} · Доступность ЛПР ${a.contactability.level} · Audit ${a.conf.level}</div>
+        <div class="co-meta">${esc(actualCityName(l))} · ${esc(a.offers.primary?a.offers.primary.name:'оффер не назначен')} · Доступность ЛПР ${a.contactability.level} · Audit ${a.conf.level}</div>
         <div class="mt10">${list.map(x=>`<div class="xs" style="padding:3px 0">• ${esc(x.text)}</div>`).join('')}</div>
         ${fix.length?`<div class="callout ${g.cls} mt10" style="padding:9px 11px"><div class="ct">${icon('right')} Чем снимается</div>
           ${fix.map(x=>`<div class="xs">• ${esc(x)}</div>`).join('')}</div>`:''}
@@ -5893,7 +5995,7 @@ function viewOutreach(){
       return `<div class="card"><div class="card-b">
         <div class="row nw"><a class="co-name" href="#/lead/${encodeURIComponent(l.id)}">${esc(l.name)}</a>${outBadge(l.outreachStatus)}
           ${overdue?'<span class="badge dgr">просрочено</span>':''}<div class="sp"></div><span class="badge ${bandMeta(a.score.band).cls}">${a.score.points}</span>${readyBadge(a.readiness.state)}</div>
-        <div class="co-meta">${esc(cityOf(l.cityKey).name)} · последний контакт ${fmtDate(l.lastContactAt)} (${relDays(l.lastContactAt)})</div>
+        <div class="co-meta">${esc(actualCityName(l))} · последний контакт ${fmtDate(l.lastContactAt)} (${relDays(l.lastContactAt)})</div>
         ${l.nextStep?`<div class="callout ${overdue?'warn':'gray'} mt10" style="padding:9px 11px"><div class="ct">${icon('right')} Следующий шаг${l.nextStepDate?' · '+fmtDate(l.nextStepDate):''}</div>${esc(l.nextStep)}</div>`:''}
         ${fr?`<div class="hintbox mt10"><b>Повторное касание rule:</b><br>${fr.map(x=>'• '+esc(x)).join('<br>')}</div>`:''}
         <div class="row mt10">
@@ -5927,7 +6029,7 @@ function viewLeadCard(r){
   if(!l){ setTopbar('Не найдено',''); $('#view').innerHTML = emptyState('Компания не найдена','Возможно, запись удалена.','<a class="btn" href="#/leads">Ко всем лидам</a>','alert'); return; }
   const a = l.analysis;
   setTopbar(`<span class="muted">Лиды</span> / ${esc(l.name)}`,
-    `${esc(a.vertical)} · ${esc(IND(l.industry).label)} · ${esc(cityOf(l.cityKey).name)} · обновлено ${fmtDate(l.updatedAt)}${l.lastVerifiedAt?' · факты проверены '+fmtDate(l.lastVerifiedAt):''}`,
+    `${esc(a.vertical)} · ${esc(IND(l.industry).label)} · ${esc(actualCityName(l))} · обновлено ${fmtDate(l.updatedAt)}${l.lastVerifiedAt?' · факты проверены '+fmtDate(l.lastVerifiedAt):''}`,
     `<div class="row">
       <button class="btn" data-act="edit-lead" data-id="${esc(l.id)}">${icon('edit')} Карточка</button>
       <button class="btn" data-act="edit-facts" data-id="${esc(l.id)}">${icon('db')} Факты</button>
@@ -5962,7 +6064,7 @@ function viewLeadCard(r){
           ${l.outcome?`<span class="badge ${l.outcome==='WON'?'ok':'dgr'}" title="Коммерческий исход">${l.outcome==='WON'?'выиграно':l.outcome==='LOST'?'проиграно':'стоп'}</span>`:''}</div>
         <div class="lh-meta">
           <span class="badge acc">${esc(a.vertical)}</span>
-          <span class="badge gray">${icon('pin')} ${esc(cityOf(l.cityKey).name)}${a.distKm!=null?' · '+a.distKm+' км':''}</span>
+          <span class="badge gray">${icon('pin')} ${esc(actualCityName(l))}${a.distKm!=null?' · '+a.distKm+' км':''}</span>
           ${relBadge(l.relationship)}
           <span class="badge outline">${esc(PIPEC[l.stage]?PIPEC[l.stage].short:l.stage)}</span>
           ${outBadge(l.outreachStatus)}
@@ -6161,7 +6263,7 @@ function tabOverview(l){
         <div class="card-b"><dl class="kv">
           <dt>Отрасль</dt><dd>${esc(IND(l.industry).label)}</dd>
           <dt>Подотрасль</dt><dd>${esc(l.subindustry||'—')}</dd>
-          <dt>Город</dt><dd>${esc(cityOf(l.cityKey).name)}</dd>
+          <dt>Город</dt><dd>${esc(actualCityName(l))}${(l.cityApprox&&l.geo&&l.geo.district)?' <span class="faint xs" title="Фактический населённый пункт по ЕГРЮЛ; ключ города определён приблизительно — подтвердите вручную при необходимости">'+esc(l.geo.district)+' р-н</span>':(l.cityApprox?' <span class="faint xs" title="Город определён приблизительно — подтвердите вручную">≈</span>':'')}</dd>
           <dt>Сотрудники</dt><dd>${l.employees!=null?esc(l.employees):'—'}</dd>
           <dt>Выручка</dt><dd>${l.revenueEst?esc(money(l.revenueEst)):'—'}</dd>
           <dt>Тип продаж</dt><dd>${l.b2b?'B2B':'B2C'}</dd>
@@ -6536,7 +6638,7 @@ function tabFacts(l){
       <div class="card"><div class="card-h">${icon('building')}<h3>Бизнес-факты</h3><div class="sp"></div><button class="btn xs" data-act="edit-lead" data-id="${esc(l.id)}">${icon('edit')}</button></div>
         <div class="card-b tight">
           ${row('Вертикаль', a.vertical)}${row('Отрасль', IND(l.industry).label)}${row('Подотрасль', l.subindustry)}
-          ${row('Город', cityOf(l.cityKey).name+', '+cityOf(l.cityKey).region)}${row('Сайт', l.website||'нет')}
+          ${row('Город', actualCityName(l)+', '+cityOf(l.cityKey).region)}${row('Сайт', l.website||'нет')}
           ${row('Сотрудники', l.employees)}${row('Выручка (оценка)', l.revenueEst, v=>v?esc(money(v)):'—')}
           ${row('Год основания', l.founded)}${row('Тип продаж', null, ()=>l.b2b?'B2B':'B2C')}
           ${row('Продукты / услуги', l.products)}${row('Производство / объекты', l.objects)}
@@ -6738,7 +6840,7 @@ function discoveryResultsHtml(){
         const preview = (()=>{ try{ const tmp = Object.assign({}, c, {id:'preview'}); const a = analyzeLead(tmp, DB.profile); return a; }catch(e){ return null; } })();
         return `<div class="disc-card ${added?'added':''}">
           <div class="dn">${esc(c.name)}</div>
-          <div class="dm">${esc(verticalOf(c))} · ${esc(IND(c.industry).label)} · ${esc(cityOf(c.cityKey).name)} · ${c.employees!=null?esc(c.employees):'?'} сотр. · ${c.hasWebsite?'сайт есть':'сайта нет'}</div>
+          <div class="dm">${esc(verticalOf(c))} · ${esc(IND(c.industry).label)} · ${esc(actualCityName(c))} · ${c.employees!=null?esc(c.employees):'?'} сотр. · ${c.hasWebsite?'сайт есть':'сайта нет'}</div>
           <div class="disc-facts">
             ${preview?`<span class="badge ${bandMeta(preview.score.band).cls}">Рейтинг лида ${preview.score.points} · ${preview.score.bandLabel}</span>
             <span class="badge ${preview.readiness.color}" title="Готовность к контакту — коммерческий барьер">Readiness: ${esc(preview.readiness.label)}</span>`:'<span class="badge gray">Рейтинг лида —</span>'}
@@ -6805,6 +6907,13 @@ function modalLead(id){
           hasWebsite:!!v.l_website, employees:v.l_employees, revenueEst:v.l_revenue, founded:v.l_founded, b2b:v.l_b2b,
           relationship:v.l_rel, relationshipNote:v.l_relnote, projectId:v.l_project||null, description:v.l_desc,
           products:v.l_products, objects:v.l_objects, marketing:v.l_marketing};
+        if(l && v.l_city !== l.cityKey){
+          /* v3.5.1 IA-02: ручной выбор города — точное подтверждение географии:
+             приблизительность снимается, geo помечается manual (реестр его больше не переписывает) */
+          patch.cityApprox = false;
+          patch.geo = Object.assign({}, l.geo||{}, {localityName: cityOf(v.l_city).name, localityType:'город',
+            approx:false, manual:true, resolvedBy:'пользователь', resolvedAt:new Date().toISOString()});
+        }
         if(l){ const nf = Object.assign({}, l.facts, {notes:v.l_notes});
           updateLead(l.id, patch, 'Изменены данные компании');
           const cur = leadById(l.id); cur.facts = nf; cur.analysis = analyzeLead(cur, DB.profile); save();
@@ -7434,7 +7543,7 @@ function exportCsv(opts){
     'Last contact','Next step','Подтверждённая потребность','Website','Revenue est'];
   const rows = (full ? DB.leads.slice() : filterLeads(DB.leads)).map(l => { const a = l.analysis, c = a.contactability.primary, e = a.entity.data;
     const vn = (l.verifiedContentNeeds||[]).slice(-1)[0];
-    return [l.name, cityOf(l.cityKey).name, a.vertical, l.subindustry||IND(l.industry).label, l.website||'', l.employees||'',
+    return [l.name, actualCityName(l), a.vertical, l.subindustry||IND(l.industry).label, l.website||'', l.employees||'',
       a.score.components.buying.points, a.score.components.potential.points, a.score.components.gap.points,
       a.score.components.fit.points, a.score.components.logistics.points, a.score.points, a.score.bandLabel, a.readiness.label,
       a.offers.primary?a.offers.primary.name:'', a.offers.secondary?a.offers.secondary.name:'', a.offers.confidence,
@@ -7587,7 +7696,7 @@ function onAct(e){
     case 'drawer-close': /* v3.4.3 REG-002: закрыть drawer; якорную навигацию НЕ глушить */
       closeDrawer(); if(!(el.tagName==='A' && el.getAttribute('href'))) e.preventDefault(); break;
     case 'lead-preview': e.preventDefault(); {
-      const l = leadById(id); if(l) openDrawer(l.name, (cityOf(l.cityKey).name||'') + ' · ' + (IND(l.industry).label||''), leadPreviewHtml(id));
+      const l = leadById(id); if(l) openDrawer(l.name, (actualCityName(l)||'') + ' · ' + (IND(l.industry).label||''), leadPreviewHtml(id));
       break; }
     case 'filters-drawer': e.preventDefault(); {
       const b = openDrawer('Все фильтры', 'Дополнительные условия отбора', filterBar() +
@@ -7698,7 +7807,7 @@ function runDiscovery(){
   const base = cityOf(DB.profile.baseCity);
   const res = generateDiscoveryAttributed(q);
   let items = res;
-  if(q.radiusKm) items = items.filter(c => { const d = distanceKm(base, cityOf(c.cityKey)); return d==null || d<=q.radiusKm; });
+  if(q.radiusKm) items = items.filter(c => { const d = (c.cityApprox||(c.geo&&c.geo.approx)) ? null : distanceKm(base, cityOf(c.cityKey)); return d==null || d<=q.radiusKm; });  /* v3.5.1 IA-02: неизвестный НП — расстояние unknown (не исключается, но и не считается близким) */
   if(q.minEmployees) items = items.filter(c => (c.employees||0) >= q.minEmployees);
   if(q.maxEmployees) items = items.filter(c => (c.employees||0) <= q.maxEmployees);
   if(q.types && q.types.length) items = items.filter(c => {
@@ -8175,7 +8284,7 @@ function viewSettings(){
    <div class="col">
     <div class="card"><div class="card-h"><span style="width:26px;height:26px;border-radius:7px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;flex:0 0 26px">${lumoSymbol('lumo-s20')}</span><div><h3>${BRAND.name} — ${BRAND.sub}</h3><div class="sub">${esc(BRAND.descriptor)}</div></div></div>
       <div class="card-b sm">
-        <div class="row nw mb6"><span class="b">Lumo v3.4.8 — TEST CANDIDATE</span><span class="sp"></span><span class="xs muted mono">build 2026-10-24 · single-file · storage: localStorage «ai_client_scout_v1»</span></div>
+        <div class="row nw mb6"><span class="b">Lumo v3.5.3 — TEST CANDIDATE</span><span class="sp"></span><span class="xs muted mono">build 2026-10-25 · single-file · storage: localStorage «ai_client_scout_v1»</span></div>
         <div class="xs muted mb6">Бренд и дизайн — из пакета миграции (BRAND/): знак «aperture + luminous star», палитра blue / cyan / violet / warm. Фавикон и app-icon встроены в файл (data-URI), офлайн.</div>
         <span class="pill" style="background:#eef3ff;color:#2b4fd0">blue ${BRAND.colors.blue}</span>
         <span class="pill" style="background:#e8f7fd;color:#0e7490">cyan ${BRAND.colors.cyan}</span>
@@ -8990,7 +9099,7 @@ function aiPromptContext(l){
   const a = l.analysis, p = DB.profile;
   return {
     lead_id: l.id, name: l.name, vertical: a.vertical, industry: l.industry, subindustry: l.subindustry || null,
-    city: cityOf(l.cityKey).name, distanceKm: a.distKm, website: l.website || null, hasWebsite: !!l.hasWebsite,
+    city: actualCityName(l), distanceKm: a.distKm, website: l.website || null, hasWebsite: !!l.hasWebsite,
     employees: l.employees, founded: l.founded, revenueEst: l.revenueEst, b2b: !!l.b2b,
     description: l.description, products: l.products, objects: l.objects, marketing: l.marketing,
     relationship: l.relationship, relationshipNote: l.relationshipNote || null,
@@ -10756,6 +10865,26 @@ function dadataSuggestionToCandidate(sug, opts){
   if(['LIQUIDATING','BANKRUPT'].includes(st.status))
     risks.push({type:'insolvency_signs', level:'HIGH', note:`Статус по ЕГРЮЛ: ${st.status==='BANKRUPT'?'банкротство':'в процессе ликвидации'}`, source:'registry', conf:0.85});
 
+  /* v3.5.1 IA-02: документированная geo-модель — фактический населённый пункт сохраняется
+     полностью (regionId, localityName, localityType, district, addressFull, КЛАДР/FIAS-идентификаторы);
+     исходные значения не подменяются и не теряются. cityKey/cityApprox остаются обратно совместимыми,
+     но приблизительный ключ точным НЕ считается (см. actualCityName/analyzeLead). */
+  const ad351 = (d.address && d.address.data) || {};
+  const geoLocality = String(ad351.settlement || ad351.city || '').trim();
+  const geo = {
+    regionId: o.region || null,
+    regionName: ad351.region || null,
+    localityName: geoLocality || null,
+    localityType: ad351.settlement_type || ad351.city_type || null,
+    district: ad351.area || null,
+    addressFull: addrVal || null,
+    kladr: ad351.settlement_kladr_id || ad351.city_kladr_id || null,
+    fias: ad351.settlement_fias_id || ad351.city_fias_id || null,
+    approx: !!city.approx,
+    manual: false,
+    source: 'DaData suggest/party (ЕГРЮЛ)'
+  };
+
   const innOk = innValid(inn), ogrnOk = ogrnValid(ogrn);
   let conf = 0.62;
   if(mgmt.name) conf += 0.08;
@@ -10764,7 +10893,7 @@ function dadataSuggestionToCandidate(sug, opts){
   if(addrVal) conf += 0.04;
 
   return {
-    name: brand, industry: indKey, cityKey: city.cityKey, cityApprox: city.approx, addressFull: addrVal,
+    name: brand, industry: indKey, cityKey: city.cityKey, cityApprox: city.approx, addressFull: addrVal, geo,
     website: null, hasWebsite: null, footprintUnknown: true,
     employees: (typeof d.employee_count==='number' ? d.employee_count : null),
     founded, revenueEst: null, b2b: null,
@@ -10801,14 +10930,20 @@ function dadataSuggestionToCandidate(sug, opts){
 /* дедупликация найденного + отметка «уже в базе» (по ИНН из entity, иначе по названию) */
 function dadataDedupe(cands){
   const seen = new Set(), out = [];
-  const leadInns = new Map(); DB.leads.forEach(l => { const i = l.entity && String(l.entity.inn||'').replace(/\D/g,''); if(i) leadInns.set(i, l); });
-  const leadNames = new Map(); DB.leads.forEach(l => leadNames.set(String(l.name||'').toLowerCase().replace(/«|»|"/g,''), l));
   cands.forEach(c => {
-    const key = c._inn || c._hid || (c.name+'|'+c.cityKey);
+    /* внутрипакетная дедупликация: по достоверному идентификатору (ИНН/hid), иначе имя+город+НП+район
+       (v3.5.1 IA-02: одноимённые кандидаты из разных НП/районов не отождествляются) */
+    const gk351 = c.geo ? (String(c.geo.localityName||'')+'|'+String(c.geo.district||'')) : '';
+    const key = c._inn || c._hid || (c.name+'|'+c.cityKey+'|'+gk351);
     if(seen.has(key)) return; seen.add(key);
-    const normName = String(c.name||'').toLowerCase().replace(/«|»|"/g,'');
-    const hit = (c._inn && leadInns.get(c._inn)) || leadNames.get(normName) || null;
-    c.inBase = !!hit; c.existingLeadId = hit ? hit.id : null;
+    /* v3.5.2 IA-03: «уже в базе» — ТОЛЬКО match (подтверждённая идентичность) через единый resolver;
+       ambiguous не даёт ни inBase, ни existingLeadId (ложное «уже в базе» устранено) */
+    const v = dadataFindInBase(c);
+    c.inBase = v.verdict==='match';
+    c.existingLeadId = (v.verdict==='match' && v.lead) ? v.lead.id : null;
+    if(v.verdict==='ambiguous') c.identityCheck = {status:'ambiguous', leadId: v.lead?v.lead.id:null,
+      leadName: v.lead?v.lead.name:null, reason: v.reason};
+    else delete c.identityCheck;
     out.push(c);
   });
   return out;
@@ -10963,33 +11098,48 @@ async function runDadataSearchFromUI(){
 /* ---------- импорт и обогащение ---------- */
 function dadataCandidateLeadData(c, projectId){
   const copy = Object.assign({}, c);
-  delete copy._inn; delete copy._hid; delete copy._okved; delete copy._mgmt; delete copy.inBase; delete copy.existingLeadId;
+  delete copy._inn; delete copy._hid; delete copy._okved; delete copy._mgmt; delete copy.inBase; delete copy.existingLeadId; delete copy.identityCheck;  /* v3.5.2 IA-03 */
   return Object.assign(copy, {projectId:projectId||null, source:'dadata'});
 }
 function importDadataAt(idx){
   const res = UI.dadataResults; if(!res || !res.items[idx]) return;
   const c = res.items[idx];
-  if(c.inBase || DB.leads.some(l => (l.entity && c._inn && String(l.entity.inn||'')===c._inn) || String(l.name||'').toLowerCase()===String(c.name).toLowerCase())){
-    toast('Такая компания уже в базе', 'warn'); return;
+  /* v3.5.2 IA-03: решение — только через единый resolver (match/distinct/ambiguous) */
+  const v = dadataFindInBase(c);
+  const doImport = () => {
+    const l = addLead(dadataCandidateLeadData(c, res.projectId));
+    logGlobal('lead','Компания добавлена из ЕГРЮЛ (DaData)', `${l.name}, ИНН ${c._inn||'—'} · Lead Score ${l.analysis.score.points}`);
+    c.inBase = true; c.existingLeadId = l.id; delete c.identityCheck;
+    save(); closeModal(); render();
+    toast(`Добавлено: ${l.name} · Рейтинг лида ${l.analysis.score.points} (${l.analysis.score.bandLabel||''})`, 'ok', 4200);
+  };
+  if(v.verdict==='match'){ toast('Такая компания уже в базе ('+v.reason+')', 'warn'); return; }
+  if(v.verdict==='ambiguous'){
+    /* безопасный пользовательский выбор: без подтверждения ничего не импортируется */
+    confirmBox('Возможный дубль — требуется подтверждение',
+      `В базе уже есть «${v.lead?v.lead.name:c.name}»${v.lead&&v.lead.geo&&v.lead.geo.localityName?' ('+v.lead.geo.localityName+(v.lead.geo.district?', '+v.lead.geo.district+' р-н':'')+')':''}. ${v.reason}. Добавить кандидата как ОТДЕЛЬНУЮ компанию?`,
+      doImport, 'Да, это другая компания');
+    return;
   }
-  const l = addLead(dadataCandidateLeadData(c, res.projectId));
-  logGlobal('lead','Компания добавлена из ЕГРЮЛ (DaData)', `${l.name}, ИНН ${c._inn||'—'} · Lead Score ${l.analysis.score.points}`);
-  c.inBase = true; c.existingLeadId = l.id;
-  save(); closeModal(); render();
-  toast(`Добавлено: ${l.name} · Рейтинг лида ${l.analysis.score.points} (${l.analysis.score.bandLabel||l.analysis.score.bandLabel||''})`, 'ok', 4200);
+  doImport();
 }
 function importAllDadata(){
   const res = UI.dadataResults; if(!res) return;
-  let n = 0;
+  let n = 0, amb = 0;
   res.items.forEach(c => {
     if(c.inBase) return;
-    if(DB.leads.some(l => (l.entity && c._inn && String(l.entity.inn||'')===c._inn))) return;
+    /* v3.5.2 IA-03: пакетный импорт — только distinct; match отмечается; ambiguous НЕ импортируется
+       пакетом (решение принимает пользователь по кнопке на карточке кандидата) */
+    const v = dadataFindInBase(c);
+    if(v.verdict==='match'){ c.inBase = true; c.existingLeadId = v.lead ? v.lead.id : null; return; }
+    if(v.verdict==='ambiguous'){ amb++; return; }
     const l = addLead(dadataCandidateLeadData(c, res.projectId));
     logGlobal('lead','Компания добавлена из ЕГРЮЛ (DaData)', `${l.name}, ИНН ${c._inn||'—'} · Lead Score ${l.analysis.score.points}`);
     c.inBase = true; c.existingLeadId = l.id; n++;
   });
   save(); render();
-  toast(n ? `Добавлено новых компаний: ${n}` : 'Новых компаний нет — все уже в базе', n?'ok':'warn', 4200);
+  toast((n||amb) ? `Добавлено новых компаний: ${n}${amb?` · пропущено «возможных дублей» (нужно ручное подтверждение): ${amb}`:''}`
+                 : 'Новых компаний нет — все уже в базе', n?'ok':'warn', 5200);
 }
 /* обогащение по ИНН: один запрос findById/party → сотрудники, финансы, все ОКВЭД */
 function applyDadataProfile(target, d, viaImport){
@@ -10999,6 +11149,27 @@ function applyDadataProfile(target, d, viaImport){
   if(typeof fin.revenue==='number' && target.revenueEst==null){ target.revenueEst = fin.revenue; changed.push(`выручка (отчётность ФНС): ${money(fin.revenue)}`); }
   const y = dadataRegYear(d.state);
   if(y && target.founded==null){ target.founded = y; changed.push(`год регистрации: ${y}`); }
+  /* v3.5.1 IA-02: реестр уточняет фактический НП только если география ещё не подтверждена вручную.
+     Легаси-карточки с пользовательским городом (нет cityApprox/geo) не трогаются; cityKey не подменяется. */
+  const ad351b = (d.address && d.address.data) || {};
+  const locName351 = String(ad351b.settlement || ad351b.city || '').trim();
+  const geoAllowed351 = !!(target.cityApprox || target.geo);
+  if(locName351 && geoAllowed351 && !(target.geo && target.geo.manual)){
+    const pg351 = target.geo || {};
+    target.geo = Object.assign({}, pg351, {
+      localityName: locName351,
+      localityType: ad351b.settlement_type || ad351b.city_type || pg351.localityType || null,
+      district: ad351b.area || pg351.district || null,
+      regionName: ad351b.region || pg351.regionName || null,
+      addressFull: (d.address && d.address.value) || pg351.addressFull || null,
+      kladr: ad351b.settlement_kladr_id || ad351b.city_kladr_id || pg351.kladr || null,
+      fias: ad351b.settlement_fias_id || ad351b.city_fias_id || pg351.fias || null,
+      approx: pg351.approx !== undefined ? pg351.approx : true,
+      manual: false,
+      source: 'DaData findById/party (ЕГРЮЛ)'
+    });
+    if((pg351.localityName||null) !== locName351) changed.push('география уточнена по ЕГРЮЛ: ' + locName351);
+  }
   if(['LIQUIDATING','BANKRUPT'].includes((d.state||{}).status)){
     target.facts = target.facts||{}; target.facts.risks = target.facts.risks||[];
     if(!target.facts.risks.some(r=>r.type==='insolvency_signs' && r.source==='registry')){
@@ -11034,22 +11205,46 @@ async function enrichDadataAt(idx){
   if(!r.ok){ openModal({title:'Обогащение не выполнено', icon:'alert', size:'narrow',
       body:`<div class="callout dgr"><div class="ct">${icon('alert')} Ошибка</div><div class="xs">${esc(r.error||'')}</div>${r.hint?`<div class="xs mt6">${esc(r.hint)}</div>`:''}</div>`,
       footer:`<div class="sp"></div><button class="btn pri" data-close="1">Понятно</button>`}); return; }
-  /* если компания уже импортирована — обновляем лид, иначе — кандидата в результатах */
-  const lead = c.existingLeadId ? leadById(c.existingLeadId) : null;
-  const target = lead || c;
-  const changed = applyDadataProfile(target, r.data);
-  if(lead){
+  /* v3.5.2 IA-03: обогащение уходит в лид базы ТОЛЬКО при подтверждённой идентичности (match);
+     distinct — запись лишь в карточку кандидата в результатах; ambiguous — явный выбор
+     пользователем (отмена = ничего не записывать). Чужая карточка не обновляется никогда. */
+  const applyToLead = (lead) => {
+    const changed = applyDadataProfile(lead, r.data);
     lead.analysis = analyzeLead(lead, DB.profile);
     logLead(lead,'discovery','Обогащение из ЕГРЮЛ (DaData, по ИНН)',
       (changed.length?changed.join('; '):'новых данных нет') + ` · запросов сегодня: ${r.used}`);
     save();
     toast(changed.length?`Обогащено: ${changed.join('; ')}`:'Обогащение: новых полей нет (уже заполнены или отсутствуют в реестре)', changed.length?'ok':'warn', 4600);
     render();
-  } else {
+  };
+  const applyToCand = (note) => {
+    const changed = applyDadataProfile(c, r.data);
     c.discoveryConfidence = round(clamp((c.discoveryConfidence||0.62)+0.04, 0.55, 0.92), 2);
     save(); render();
-    toast(changed.length?`Кандидат обогащён: ${changed.join('; ')}`:'Новых полей нет', changed.length?'ok':'warn', 4600);
+    toast((note?note+' · ':'') + (changed.length?`Кандидат обогащён: ${changed.join('; ')}`:'Новых полей нет'), changed.length?'ok':'warn', 5600);
+  };
+  const lead = c.existingLeadId ? leadById(c.existingLeadId) : null;
+  if(lead){
+    const v = dadataIdentityResolve(c, lead);
+    if(v.verdict==='match'){ applyToLead(lead); return; }
+    if(v.verdict==='ambiguous'){
+      openModal({title:'Обогащение: идентичность не подтверждена', icon:'alert', size:'wide',
+        body:`<div class="callout warn"><div class="ct">${icon('alert')} Возможный дубль</div>
+          <div class="xs">Кандидат «${esc(c.name)}» (ИНН ${esc(c._inn||'—')}) похож на лид «${esc(lead.name)}», но идентичность НЕ подтверждена: ${esc(v.reason)}. Куда записать реестровые данные (сотрудники/выручка/ОКВЭД)?</div></div>`,
+        footer:`<div class="sp"></div>
+          <button class="btn" data-close="1">Отмена (ничего не записывать)</button>
+          <button class="btn" id="v352-enr-cand">${icon('search')} Только в кандидата</button>
+          <button class="btn pri" id="v352-enr-lead">${icon('check')} Это та же организация — в лид</button>`,
+        onMount:()=>{
+          const bc = document.getElementById('v352-enr-cand'); if(bc) bc.onclick = ()=>{ closeModal(); applyToCand(''); };
+          const bl = document.getElementById('v352-enr-lead'); if(bl) bl.onclick = ()=>{ closeModal(); applyToLead(lead); };
+        }});
+      return;
+    }
+    applyToCand(`Запись в лид «${lead.name}» отменена: ${v.reason}`);
+    return;
   }
+  applyToCand('');
 }
 /* обогащение существующего лида по его ИНН (из карточки/модалки юрлица) */
 async function enrichLeadByInn(leadId){
@@ -11241,7 +11436,7 @@ function dadataResultsHtml(){
         const e = c.entity||{};
         return `<div class="disc-card ${c.inBase?'added':''}">
           <div class="dn">${esc(c.name)} ${ruBadge('REALDATA','ok')}</div>
-          <div class="dm">${esc(IND(c.industry).label)} · ${esc(cityOf(c.cityKey).name)}${c.cityApprox?' (приблизительно)':''} · ОКВЭД ${esc(c._okved||'—')}</div>
+          <div class="dm">${esc(IND(c.industry).label)} · ${esc(actualCityName(c))}${c.cityApprox?' (приблизительно)':''} · ОКВЭД ${esc(c._okved||'—')}</div>
           <div class="xs mono muted mt6">ИНН ${esc(e.inn||'—')} · ОГРН ${esc(e.ogrn||'—')} · рег. ${esc(c.founded||'—')}${c.employees!=null?` · сотрудников: ${esc(c.employees)}`:''}</div>
           <div class="xs muted mt6">${icon('pin')} ${esc(c.addressFull||'—')}</div>
           ${c._mgmt?`<div class="xs muted mt6">${icon('user')} Руководитель: ${esc(c._mgmt)}</div>`:''}
@@ -11255,7 +11450,7 @@ function dadataResultsHtml(){
           </div>
           <div class="row mt10">
             ${c.inBase ? `<span class="badge ok">уже в базе</span>${c.existingLeadId?`<a class="btn sm gh" href="#/lead/${encodeURIComponent(c.existingLeadId)}">${icon('right')} Открыть</a>`:''}`
-              : `<button class="btn sm pri" data-act="dd-import" data-idx="${i}">${icon('plus')} Добавить и проанализировать</button>`}
+              : `${(c.identityCheck&&c.identityCheck.status==='ambiguous')?`<span class="badge warm" title="${esc(c.identityCheck.reason||'Требуется проверка')}">возможен дубль — проверьте</span>`:''}<button class="btn sm pri" data-act="dd-import" data-idx="${i}">${icon('plus')} Добавить и проанализировать</button>`}
             <button class="btn sm gh" data-act="dd-preview" data-idx="${i}">${icon('eye')} Предпросмотр</button>
             <button class="btn sm gh" data-act="dd-enrich" data-idx="${i}" title="Один запрос по ИНН: сотрудники, выручка из отчётности ФНС, все ОКВЭД, реестр МСП">${icon('trend')} Обогатить</button>
           </div></div>`; }).join('')}
@@ -11649,12 +11844,25 @@ function enrichParseSocials(html, base){
   return enrichDedupeSocials(out);
 }
 /* v3.2: расширенное извлечение контактов: tel:, mailto:, JSON-LD schema.org, текст */
+/* v3.5.0 D4/D5 (Task03 §2C): ЕДИНАЯ схема форматной проверки email для ВСЕХ путей извлечения
+   (mailto:, текст, JSON-LD). Отклоняются: мусорные local-part («:info@…» после mailto::),
+   адреса без TLD, шаблоны-плейсхолдеры (example./yourdomain/…), файловые расширения.
+   mailto: по-прежнему отсекает query-параметры (?subject/cc/bcc — не скрытые адресаты). */
+const ENRICH_EMAIL_RE = /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/;
+const ENRICH_EMAIL_BAD = /(example\.|@email\.com|w3\.org|sentry\.|jquery|\.png|\.jpe?g|\.svg|\.css|\.js|\.gif|\.webp|@2x|domain\.com|yourdomain)/i;
+function enrichValidEmail(v){
+  const s = String(v==null?'':v).trim().toLowerCase();
+  if(!s || s.includes('..')) return '';
+  if(!ENRICH_EMAIL_RE.test(s)) return '';
+  if(ENRICH_EMAIL_BAD.test(s)) return '';
+  return s;
+}
 function enrichExtractContacts(html){
   const emails = [], phones = [], socials = [], sameAs = [];
   let m; const reTel = /href=["']tel:([^"'+]+)?([^"']*)["']/gi;
   while((m = reTel.exec(html))){ const v = enrichNormPhone((m[1]||'')+(m[2]||'')); if(v && !phones.includes(v)) phones.push(v); }
   const reMail = /href=["']mailto:([^"']+)["']/gi;
-  while((m = reMail.exec(html))){ let v = String(m[1]).split('?')[0].trim().toLowerCase(); if(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v) && !emails.includes(v)) emails.push(v); }
+  while((m = reMail.exec(html))){ const v = enrichValidEmail(String(m[1]).split('?')[0]); if(v && !emails.includes(v)) emails.push(v); }  /* v3.5.0 D5 */
   enrichParseEmails(html).forEach(v=>{ if(!emails.includes(v)) emails.push(v); });
   enrichParsePhones(html).forEach(v=>{ if(!phones.includes(v)) phones.push(v); });
   const reLd = /<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi;
@@ -11667,7 +11875,7 @@ function enrichExtractContacts(html){
       if(!/Organization|LocalBusiness|Business/.test(ty)) return;
       const tel = n.telephone; const em = n.email;
       if(typeof tel==='string'){ const v = enrichNormPhone(tel); if(v && !phones.includes(v)) phones.push(v); }
-      if(typeof em==='string'){ const v = em.trim().toLowerCase(); if(v && !emails.includes(v)) emails.push(v); }
+      if(typeof em==='string'){ const v = enrichValidEmail(em); if(v && !emails.includes(v)) emails.push(v); }  /* v3.5.0 D4: JSON-LD — та же схема валидации */
       const sa = n.sameAs; (Array.isArray(sa)?sa:(sa?[sa]:[])).forEach(u=>{ if(typeof u==='string') sameAs.push(u); });
     });
   }
@@ -11679,8 +11887,8 @@ function enrichExtractContacts(html){
 }
 function enrichParseEmails(html){
   const out = []; const re = /([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/gi; let m;
-  const bad = /(example\.|@email\.com|w3\.org|sentry\.|jquery|\.png|\.jpe?g|\.svg|\.css|\.js|\.gif|\.webp|@2x|domain\.com|yourdomain)/i;
-  while((m = re.exec(html))){ const v = m[1].toLowerCase(); if(bad.test(v)) continue; if(!out.includes(v)) out.push(v); if(out.length>=5) break; }
+  /* v3.5.0 D4: единая схема валидации enrichValidEmail (формат + bad-фильтр + «..») вместо локальной копии */
+  while((m = re.exec(html))){ const v = enrichValidEmail(m[1]); if(!v) continue; if(!out.includes(v)) out.push(v); if(out.length>=5) break; }
   return out;
 }
 function enrichNormPhone(raw){
@@ -11726,6 +11934,118 @@ function enrichVisibleText(html){
     .replace(/\s+/g,' ')
     .trim();
 }
+/* v3.5.0 D3 (Task03 §2C): сопоставление токена бренда по слово-границе, а не подстрокой:
+   «строймастер» НЕ совпадает с «строймастерплюс» (другое юрлицо той же отрасли). */
+function enrichTokenHit(text, tok){
+  const t = String(tok||'').toLowerCase(); if(!t) return false;
+  const s = String(text||'').toLowerCase();
+  if(!s.includes(t)) return false;
+  const esc = t.replace(/[.*+?^${}()|[\]\\]/g, (mm) => '\\' + mm);
+  return new RegExp('(^|[^\\p{L}\\p{N}])' + esc + '([^\\p{L}\\p{N}]|$)', 'u').test(s);
+}
+/* v3.5.0 D1 / v3.5.1 IA-01: локальности страницы — ПОЛНЫЕ названия населённых пунктов из
+   адресных конструкций видимого текста («Москва, ул. …», «г. Набережные Челны», «д. Большая Уча, ул. …»).
+   Упоминание города в списке доставки адресом не является. Многословные названия («Набережные Челны»,
+   «Большая Уча», «Старые Зятцы») распознаются ЦЕЛИКОМ; префиксы типа поселения (г./город/д./деревня/
+   с./село/п./посёлок/пгт/…) в название не входят; первое/последнее слово не становится самостоятельным
+   городом; хвостовые слова региона/района отбрасываются. Нормализация предсказуема: регистр, ё→е, пробелы. */
+function enrichNormLocality(s){
+  return String(s==null?'':s).toLowerCase().replace(/ё/g,'е')
+    .replace(/[\s\u00a0]+/g,' ').replace(/[.,;:!?\-]+$/,'').trim();
+}
+const ENRICH_SETTLEMENT_PREFIX = '(?:г\\.?|город|д\\.?|деревня|с\\.?|село|п\\.?|посёлок|поселок|пгт\\.?|ст\\.?|станция|аул|хутор|снт|мкр\\.?|микрорайон)';
+const ENRICH_LOC_STOP_WORD = /^(республика|республики|республике|республику|республикой|край|края|краю|область|области|областью|округ|округа|округу|район|района|району|удмуртск\w*|татарстан\w*|башкортостан\w*|пермск\w*|кировск\w*|свердловск\w*|московск\w*|ленинградск\w*|нижегородск\w*|марий\s?эл\w*)$/i;
+const ENRICH_LOC_ADJ_TAIL = /(ского|ого|скому|ской|ую)$/i;   /* родовые прилагательные: «Завьяловского», «Удмуртской» */
+const ENRICH_LOC_TYPE_WORD = /^(г|город|д|деревня|с|село|п|посёлок|поселок|пгт|ст|станция|аул|хутор|снт|мкр|микрорайон)$/i;
+function enrichPageLocalities(html){
+  const text = enrichVisibleText(html);
+  const set = new Set();
+  const addRaw = (raw) => {
+    const wordsAll = String(raw==null?'':raw).trim().split(/[\s\u00a0]+/).filter(Boolean);
+    if(!wordsAll.length) return;
+    /* подряд только слова с заглавной буквы; стоп-слова региона/района и родовые хвосты обрывают захват */
+    const caps = [];
+    for(let i=0;i<wordsAll.length && caps.length<3;i++){
+      const w0 = wordsAll[i].replace(/[.,;:!?]+$/,'');
+      if(!/^\p{Lu}/u.test(w0)) break;
+      if(i>0 && (ENRICH_LOC_STOP_WORD.test(w0) || ENRICH_LOC_ADJ_TAIL.test(w0))) break;
+      if(i===0 && (ENRICH_LOC_STOP_WORD.test(w0) || ENRICH_LOC_ADJ_TAIL.test(w0))) return;
+      caps.push(w0);
+    }
+    while(caps.length>1 && ENRICH_LOC_TYPE_WORD.test(caps[0])) caps.shift();
+    if(!caps.length) return;
+    const n = enrichNormLocality(caps.join(' '));
+    if(n && n.length>=3 && !ENRICH_LOC_STOP_WORD.test(n)) set.add(n);
+  };
+  let m;
+  /* A: префиксная форма — «г. X Y», «д. X Y», «пгт X» (до строки читаются 3 слова с заглавной) */
+  const reA = new RegExp('(?:^|[^\\p{L}])' + ENRICH_SETTLEMENT_PREFIX + '\\s+(\\p{Lu}[^,;.:!?()\\[\\]]{0,60})', 'giu');
+  while((m = reA.exec(text))){ addRaw(m[1]); }
+  /* B: адресная цепочка — «X Y, ул./пр./пер./ш./наб./пл. …» */
+  const reB = /((?:\p{Lu}[\p{L}'-]*\s+){0,2}\p{Lu}[\p{L}'-]*)\s*,\s*(?:ул\.|улица|пр\.|проспект|пер\.|переулок|бульвар|б-р|ш\.|шоссе|наб\.|пл\.|площадь)\s/giu;
+  while((m = reB.exec(text))){ addRaw(m[1]); }
+  return set;
+}
+/* v3.5.1 IA-01: сопоставление локальности и города карточки: точное ИЛИ сплошная словесная
+   последовательность («челны» ↔ «набережные челны», «уча» ↔ «большая уча»); одиночное слово
+   короче 4 букв частичным совпадением не считается. Совпадение НЕ добавляет confidence —
+   оно лишь снимает cap «адрес другого города» (защита D1 против чужих адресов сохраняется). */
+function enrichLocalityMatches(locs, normCity){
+  if(!normCity) return true;
+  const cw = normCity.split(' ');
+  for(const loc of (locs||[])){
+    if(loc === normCity) return true;
+    const lw = String(loc).split(' ');
+    const a = lw.length <= cw.length ? lw : cw;
+    const b = lw.length <= cw.length ? cw : lw;
+    if(a.length === b.length) continue;
+    if(a.length === 1 && a[0].length < 4) continue;
+    for(let i = 0; i + a.length <= b.length; i++){
+      let ok = true;
+      for(let j = 0; j < a.length; j++){ if(a[j] !== b[i+j]){ ok = false; break; } }
+      if(ok) return true;
+    }
+  }
+  return false;
+}
+/* v3.5.0 D1/D2: верификация страницы кандидата — единая для основного и альтернативного пути
+   enrichLead (семантика очков v3.4.x сохранена: бренд +10, город +8, адрес +10,
+   телефон карточки +15 / просто телефон +6, email +4). */
+function enrichVerifySitePage(html, ctx){
+  const lowTxt = String(html||'').toLowerCase();
+  const toks = enrichTokensAll(ctx.names||[]);
+  const brandOnPage = toks.some(t=>enrichTokenHit(lowTxt, t));
+  const cityName = String(ctx.cityName||'');
+  const cityOnPage = !!(cityName && lowTxt.includes(cityName.toLowerCase()));
+  const addr0 = String(ctx.addrKnown||'').split(',')[0].trim();
+  const addrOnPage = !!(addr0 && lowTxt.includes(addr0.toLowerCase()));
+  const xcv = enrichExtractContacts(html||'');
+  const phoneKnownHit = xcv.phones.some(pp=>(ctx.phonesKnown||[]).some(k=>String(k)===String(pp)));
+  let v = 0; const vr = [];
+  if(brandOnPage){ v += 10; vr.push('бренд упомянут на странице'); }
+  if(cityOnPage){ v += 8; vr.push('город упомянут на странице'); }
+  if(addrOnPage){ v += 10; vr.push('адрес найден на странице'); }
+  if(phoneKnownHit){ v += 15; vr.push('телефон совпал с карточкой'); }
+  else if(xcv.phones.length){ v += 6; vr.push('на странице есть телефон'); }
+  if(xcv.emails.length){ v += 4; vr.push('на странице есть email'); }
+  const locs = enrichPageLocalities(html);
+  /* v3.5.1 IA-01: нормализованное сравнение (полные названия, ё/е, префиксы типа поселения);
+     отсутствие адресных данных — «нет данных», а не доказательство чужой компании. */
+  const locMismatch = !!(locs.size && cityName && !enrichLocalityMatches(Array.from(locs), enrichNormLocality(cityName)));
+  return {v, vr, brandOnPage, cityOnPage, addrOnPage, phoneKnownHit,
+    hasAnyContact: !!(xcv.phones.length || xcv.emails.length),
+    localities: Array.from(locs), locMismatch};
+}
+/* v3.5.0 D1/D2: вердикт верификации — бренд ОБЯЗАТЕЛЕН на странице (иначе cap 40);
+   адресная локальность другого города при отсутствии города карточки — cap 45
+   («сомнительный отмечается как требующий проверки», ТЗ §2C). */
+function enrichApplyPageVerdict(best, pv){
+  if(pv.v > 0){ best.conf = Math.min(100, best.conf + pv.v); best.reasons = best.reasons.concat(pv.vr); }
+  else { best.conf = Math.max(20, best.conf - 25); best.reasons.push('страница не подтверждает бренд/город/контакты — confidence снижен'); }
+  if(!pv.brandOnPage){ best.conf = Math.min(best.conf, 40); best.reasons.push('бренд не подтверждён на странице — сайт требует проверки'); }
+  else if(pv.locMismatch){ best.conf = Math.min(best.conf, 45); best.reasons.push('на странице адрес другого города (' + pv.localities.join(', ') + ') — вероятна одноимённая компания, требуется проверка'); }
+  best.validated = true;
+}
 /* v3.4.4 FIX-1: Known website — НЕ вечная истина. Вердикт проверки известного сайта:
    OK — открывается и подтверждает компанию;
    STALE — технически непригоден (не резолвится, 4xx/5xx, repeated timeout, почти пустая страница);
@@ -11747,7 +12067,7 @@ function enrichKnownSiteStatus(o){
   const text = enrichVisibleText(o.html);
   const low = String(o.html||'').toLowerCase();
   const toks = enrichTokensAll(o.names||[]);
-  const brandHit = toks.some(t2=>t2 && low.includes(t2));
+  const brandHit = toks.some(t2=>enrichTokenHit(low, t2));   /* v3.5.0 D3: слово-граница */
   const xc = enrichExtractContacts(o.html||'');
   const hasContacts = !!(xc.phones.length || xc.emails.length || xc.socials.length);
   const dig = s=>String(s||'').replace(/\D/g,'').slice(-10);
@@ -11794,10 +12114,12 @@ function enrichSourceLabel(f){
 }
 function enrichScoreSite(res, ctx){
   /* v3.1+v3.3: независимые признаки: название, город, адрес, телефон, ИНН, домен, authority-подтверждение.
-     RELEVANCE GATE: бренд БЕЗ города/адреса/телефона/INN/известного домена — не официальный сайт (cap LOW). */
+     RELEVANCE GATE: бренд БЕЗ города/адреса/телефона/INN/известного домена — не официальный сайт (cap LOW).
+     v3.5.0 D2/D3: токены бренда сопоставляются по слово-границе (enrichTokenHit), а gate усилен —
+     частичное совпадение названия без сильных идентификаторов тоже cap LOW (однофамильцы/похожие имена). */
   const reasons = []; let c = 40;
   const text = ((res.title||'')+' '+(res.description||'')).toLowerCase();
-  const hit = ctx.toks.filter(t=>text.includes(t));
+  const hit = ctx.toks.filter(t=>enrichTokenHit(text, t));
   const brandHit = ctx.toks.length && hit.length >= Math.min(2, ctx.toks.length);
   if(brandHit){ c += 25; reasons.push('совпадает название/бренд'); }
   else if(hit.length){ c += 12; reasons.push('частичное совпадение названия'); }
@@ -11816,15 +12138,21 @@ function enrichScoreSite(res, ctx){
   if(/официальн|official/i.test(res.title||'')){ c += 5; reasons.push('помечен как официальный в заголовке'); }
   if(ctx.corroborated){ c += 5; reasons.push('бренд подтверждён авторитетным источником'); }
   if(ENRICH_AUTHORITY_RE.test(h)){ c = Math.min(c, 45); reasons.push('агрегатор/authoritative-источник: не официальный сайт'); }
-  if(brandHit && !cityHit && !innHit && !phoneHit && !addrHit && !domainHit){
-    c = Math.min(c, 45); reasons.push('бренд без города/контактов/адреса/INN: недостаточно для официального сайта');
+  const strongEvidence = innHit || phoneHit || addrHit || domainHit;   /* v3.5.0 D2 */
+  if(!strongEvidence && !(brandHit && cityHit)){
+    c = Math.min(c, 45);
+    reasons.push(brandHit
+      ? 'бренд без города/контактов/адреса/INN: недостаточно для официального сайта'
+      : 'нет полного совпадения бренда и города/контактов/адреса/INN/домена: недостаточно для официального сайта');
   }
   return {conf: Math.max(0, Math.min(100, Math.round(c))), reasons};
 }
 async function enrichLead(id, mode){
   const l = leadById(id); if(!l) throw enrichFail('net');
   mode = mode==='deep' ? 'deep' : 'quick';
-  const cityName = l.cityKey ? (cityOf(l.cityKey).name||'') : '';
+  /* v3.5.1 IA-02: enrichment-запросы используют фактический населённый пункт (деревня/село),
+     а не приблизительный ключ регионального центра */
+  const cityName = l.cityKey ? (actualCityName(l)||'') : '';
   const names = enrichNames(l);
   const brand = names[0];
   const inn = (l.entity&&l.entity.data&&l.entity.data.inn)||(l.entity&&l.entity.inn)||'';
@@ -11841,6 +12169,8 @@ async function enrichLead(id, mode){
   const authorityUrls = [];
   const siteResults = [];
   const collectSite = rs => (rs||[]).forEach(r=>{
+    let pu; try{ pu = new URL(String(r.url||'')); }catch(e){ return; }
+    if(pu.protocol!=='http:' && pu.protocol!=='https:') return;   /* v3.5.0 D6: кандидатом сайта может быть только http(s); javascript:/data:/ftp: и пр. игнорируются и не отправляются в helper */
     const h = enrichHost(r.url); if(!h) return;
     if(ENRICH_AUTHORITY_RE.test(h)){ corroborated = true; if(authorityUrls.length<2) authorityUrls.push(r.url); }
     if(ENRICH_SITE_BLOCKED_RE.test(h) || ENRICH_SITE_BLOCKED_RE.test(String(r.url||''))) return;  /* reddit/форумы/соцсети/агрегаторы — не сайт */
@@ -11896,19 +12226,10 @@ async function enrichLead(id, mode){
     const pg = await fetchWithFallback(best.url);
     if(pg && pg.html){
       siteHtml = pg.html; siteFetch = 'ok';
-      const lowTxt = siteHtml.toLowerCase();
-      let v = 0; const vr = [];
-      if(enrichTokensAll(names).some(t=>lowTxt.includes(t))){ v += 10; vr.push('бренд упомянут на странице'); }
-      if(cityName && lowTxt.includes(String(cityName).toLowerCase())){ v += 8; vr.push('город упомянут на странице'); }
-      const addr0 = String(addrKnown).split(',')[0].trim();
-      if(addr0 && lowTxt.includes(addr0.toLowerCase())){ v += 10; vr.push('адрес найден на странице'); }
-      const xcv = enrichExtractContacts(siteHtml);
-      if(xcv.phones.some(pp=>phonesKnown.includes(pp))){ v += 15; vr.push('телефон совпал с карточкой'); }
-      else if(xcv.phones.length){ v += 6; vr.push('на странице есть телефон'); }
-      if(xcv.emails.length){ v += 4; vr.push('на странице есть email'); }
-      if(v>0){ best.conf = Math.min(100, best.conf + v); best.reasons = best.reasons.concat(vr); }
-      else { best.conf = Math.max(20, best.conf - 25); best.reasons.push('страница не подтверждает бренд/город/контакты — confidence снижен'); }
-      best.validated = true;
+      /* v3.5.0 D1/D2/D3: верификация через enrichVerifySitePage + вердикт (бренд обязателен;
+         адрес чужого города понижает до LOW). Семантика очков v3.4.x сохранена. */
+      const pv = enrichVerifySitePage(siteHtml, {names, cityName, addrKnown, phonesKnown});
+      enrichApplyPageVerdict(best, pv);
     } else { siteFetch = 'failed'; best.reasons.push('страница недоступна: не верифицирован'); }
     /* v3.4.4 FIX-1 STALE KNOWN-SITE RECOVERY: known website проверяется каждый запуск.
        STALE/UNVERIFIED → confidence ниже порога «найденного» сайта (в карточке сайт НЕ удаляется),
@@ -11932,13 +12253,9 @@ async function enrichLead(id, mode){
         const pg = await fetchWithFallback(best.url);
         if(pg && pg.html){
           siteHtml = pg.html; siteFetch = 'ok';
-          const lowTxt = siteHtml.toLowerCase(); let v = 0; const vr = [];
-          if(enrichTokensAll(names).some(t=>lowTxt.includes(t))){ v += 10; vr.push('бренд упомянут на странице'); }
-          if(cityName && lowTxt.includes(String(cityName).toLowerCase())){ v += 8; vr.push('город упомянут на странице'); }
-          const xcv = enrichExtractContacts(siteHtml);
-          if(xcv.phones.length){ v += 6; vr.push('на странице есть телефон'); }
-          if(xcv.emails.length){ v += 4; vr.push('на странице есть email'); }
-          best.conf = Math.min(100, best.conf + v); best.reasons = best.reasons.concat(vr); best.validated = true;
+          /* v3.5.0 D1/D2/D3: та же верификация, что и в основном пути (единый вердикт) */
+          const pv = enrichVerifySitePage(siteHtml, {names, cityName, addrKnown, phonesKnown});
+          enrichApplyPageVerdict(best, pv);
         } else { siteFetch = 'failed'; }
       }
     }
@@ -11974,10 +12291,13 @@ async function enrichLead(id, mode){
     E.alternatives = cands.filter(c=>c!==best).slice(0,3).map(c=>({value:c.url, confidence:c.conf, source:c.source, reasons:c.reasons}));
   }
 
-  /* ---------- CONTACTS & SOCIALS: официальный сайт — primary source ---------- */
+  /* ---------- CONTACTS & SOCIALS: официальный сайт — primary source ----------
+     v3.5.0 D1–D3 (анти-каскад): контакты/соцсети извлекаются ТОЛЬКО если кандидат
+     подтверждён (conf ≥ 55). Страница неподтверждённого кандидата принадлежит
+     непроверенной идентичности — её контакты не должны выдаваться за контакты лида. */
   const socCands = [];
   const siteUrl = best ? best.url : '';
-  if(siteHtml && best){
+  if(siteHtml && best && best.conf >= 55){
     const xc = enrichExtractContacts(siteHtml);
     const siteConf = best.conf;
     xc.socials.forEach(ss=>{ socCands.push({platform:ss.platform, value:ss.value, source:'OFFICIAL_SITE_LINK', sourceType:'OFFICIAL_SITE',
@@ -12009,7 +12329,7 @@ async function enrichLead(id, mode){
         const htmlA = pgA && pgA.html ? pgA.html : '';
         if(!htmlA) continue;
         const lowA = htmlA.toLowerCase();
-        const brandOnPage = enrichTokensAll(names).some(t=>lowA.includes(t));
+        const brandOnPage = enrichTokensAll(names).some(t=>enrichTokenHit(lowA, t));   /* v3.5.0 D3: слово-граница */
         enrichParseSocials(htmlA, au).forEach(ss=>{
           socCands.push({platform:ss.platform, value:ss.value, source:'AUTHORITY_DIRECTORY', sourceType:'AUTHORITY_DIRECTORY',
             sourceUrl:au, confidence: brandOnPage ? 85 : 60,
@@ -12032,7 +12352,7 @@ async function enrichLead(id, mode){
         for(const r of rs){
           const norm = enrichNormSocial(r.url); if(!norm || !pl.hosts.some(hh=>norm.includes(hh) || norm.includes('vk.ru'))) continue;
           const text = ((r.title||'')+' '+(r.description||'')).toLowerCase();
-          const toks = enrichTokens(nm); const hit = toks.filter(t2=>text.includes(t2));
+          const toks = enrichTokens(nm); const hit = toks.filter(t2=>enrichTokenHit(text, t2));   /* v3.5.0 D3 */
           const exact = toks.length && hit.length >= toks.length;
           const cityHit = cityName && text.includes(String(cityName).toLowerCase());
           const signals = [];
@@ -12100,7 +12420,7 @@ async function enrichLead(id, mode){
         const vals = kind==='email' ? enrichParseEmails(text) : enrichParsePhones(text);
         if(!vals[0]) continue;
         const lowT = text.toLowerCase(); const toks = enrichTokens(nm);
-        const hit = toks.filter(t2=>lowT.includes(t2));
+        const hit = toks.filter(t2=>enrichTokenHit(lowT, t2));   /* v3.5.0 D3 */
         const exact = toks.length && hit.length >= toks.length;
         const cityHit = cityName && lowT.includes(String(cityName).toLowerCase());
         let conf = exact && cityHit ? 65 : 45;
@@ -12221,21 +12541,31 @@ function enrichPreviewModal(id){
         Сайт НЕ удалён из карточки.${ksC.alternative?` Найден альтернативный кандидат официального сайта: <b>${esc(ksC.alternative)}</b> — см. поле «Сайт» выше; замена только после «Применить выбранные».`:' Если альтернатива не найдена — укажите сайт в карточке вручную и повторите поиск.'}</div></div>`
     : '';
   const rows = [];
+  /* v3.5.0 D7: тот же сайт в другом представлении (схема/www/trailing slash) — НЕ «замена чужим»:
+     сравниваем по нормализованному host; строка остаётся доступной для ручного обновления варианта,
+     но без пугающего overwrite-предупреждения и без авто-галочки. */
+  const hostEq = (a, b) => { try{
+      const norm = s => /^https?:/i.test(String(s).trim()) ? String(s).trim() : 'https://'+String(s).trim();
+      const x = new URL(norm(a)), y = new URL(norm(b));
+      return x.hostname.replace(/^www\./,'').toLowerCase() === y.hostname.replace(/^www\./,'').toLowerCase();
+    }catch(e){ return false; } };
   const mk = (key, label, found) => {
     const cur = enrichCurrentOf(l, key);
     const conf = found?found.confidence:0;
     const cat = enrichCat(conf);
     const same = found && cur && String(cur).toLowerCase()===String(found.value).toLowerCase();
-    const overwrite = found && cur && !same;
+    const sameSite = key==='website' && found && cur && !same && hostEq(cur, found.value);   /* v3.5.0 D7 */
+    const overwrite = found && cur && !same && !sameSite;
     const disabled = !found || conf<55 || same;
-    const checked = found && !disabled && conf>=75 && !overwrite;   /* v3.0: MEDIUM (55–74) — только вручную */
+    const checked = found && !disabled && conf>=75 && !overwrite && !sameSite;   /* v3.0: MEDIUM (55–74) — только вручную; v3.5.0 D7: вариант того же сайта — вручную */
     rows.push(`<div class="mt10" style="padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2)">
       <div class="row nw" style="gap:8px;align-items:flex-start">
         <label class="chk ${checked?'on':''}" style="flex:none;margin-top:2px"><input type="checkbox" data-enr="${key}" ${checked?'checked':''} ${disabled?'disabled':''}></label>
         <div style="flex:1">
-          <div class="b xs">${label} ${same?'<span class="badge ok">уже в карточке, совпадает</span>':''}</div>
+          <div class="b xs">${label} ${same?'<span class="badge ok">уже в карточке, совпадает</span>':sameSite?'<span class="badge ok">уже в карточке (тот же сайт)</span>':''}</div>
           ${found?`<div class="xs mt4">${esc(found.value)} · <b>${conf}%</b> <span class="badge ${cat==='LOW'?'dgr':cat==='MEDIUM'?'warm':'ok'}">${cat}</span></div>
             <div class="xs faint mt2">${esc(enrichSourceLabel(found))} · ${esc(found.source)}${found.sourceUrl?` · ${esc(found.sourceUrl)}`:''}${(found.signals||found.reasons||[]).length?' · '+esc((found.signals||found.reasons).join(', ')):''}</div>
+            ${sameSite?`<div class="xs mt4" style="color:var(--muted)">Тот же сайт в другом варианте (схема/www): <b>${esc(cur)}</b> → <b>${esc(found.value)}</b>. Отметьте, чтобы обновить вариант; без галочки значение не меняется.</div>`:''}
             ${overwrite?`<div class="xs mt4" style="color:var(--warm)">Текущее: <b>${esc(cur)}</b> → найдено: <b>${esc(found.value)}</b>. Без галочки значение не меняется.</div>`:''}
             ${conf<55?'<div class="xs mt4" style="color:var(--hot)">LOW: автоматическое применение запрещено — только вручную после проверки.</div>':''}`
            :'<div class="xs faint mt4">Не найдено</div>'}
@@ -12295,9 +12625,14 @@ function enrichApplySel(id){
       applied.push(pl?pl.label:k);
     }
   });
-  l.analysis = analyzeLead(l, DB.profile);
-  logLead(l, 'facts', 'Обогащение применено (preview → подтверждение)', applied.join(', ')||'ничего');
-  save(); closeModal(); render();
+  /* v3.5.0 D8: событие истории — только если ДЕЙСТВИТЕЛЬНО что-то применено
+     (нулевое применение не создаёт записей/шума; идемпотентность событий) */
+  if(applied.length){
+    l.analysis = analyzeLead(l, DB.profile);
+    logLead(l, 'facts', 'Обогащение применено (preview → подтверждение)', applied.join(', '));
+    save();
+  }
+  closeModal(); render();
   toast(applied.length?`Записано: ${applied.join(', ')}`:'Ничего не применено', applied.length?'ok':'warn');
 }
 async function enrichRun(id, mode, btn){

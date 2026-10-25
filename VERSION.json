@@ -1,6 +1,6 @@
 {
   "product": "Lumo — AI-КЛИЕНТ-СКАУТ",
-  "version": "3.4.8",
+  "version": "3.5.3",
   "track": "html_single_file",
   "target": "GitHub Pages (статический хостинг, автодеплой через GitHub Actions)",
   "built_at": "2026-10-24",
@@ -42,11 +42,11 @@
   ],
   "files": {
     "index.html": {
-      "size": 1235375,
-      "sha256": "ff1c8f981c63bca77b89b4944ac803e6389011a5ae48d18bdebe908686ab2397"
+      "size": 1265385,
+      "sha256": "1c4d97845e3c4f9834bf6ba077596fb75127222b654c5666025e2f3eba5e7e90"
     }
   },
-  "generatedAt": "2026-10-24T19:12:54+00:00",
-  "notes": "Owner-approved pilot deploy bundle; v3.4.8 + reviewed mailto validation/offset patch. REG-010 pending.",
+  "generatedAt": "2026-10-25T14:39:42+00:00",
+  "notes": "v3.5.3 TEST CANDIDATE — Task 04C (IA-04, узкий патч): dadataFindInBase byHid не доверяет совпадению строк hid — сверка через единый dadataIdentityResolve; разные валидные ИНН всегда distinct (hid их не перекрывает); match только при общем verdict=match. Приоритет ИНН, прежнее корректное поведение hid, ambiguous/distinct без идентификаторов сохранены (C1–C8). RED на v3.5.2: 5 FAIL (репродукция ТЗ дословно); GREEN 18/18. Регрессии: v352 42/42, v351 57/57, v350 375/0 (precision/recall 1.0), browser 14+24, v348/v347 jsdom 129/129, helper 94+2. НЕ ДЛЯ ДЕПЛОЯ без REG-010 и решения владельца.",
   "remediation": "v3.4.4: FIX-1 (stale known-site recovery) + FIX-2 (кнопки Simple/Expert) + FIX-3 (partial success A/B) + FIX-4 (sidebar computed-style) fixed; historical regressions re-verified: browser QA v3.4.3 22/22, e2e live-stack 11/11, все enrichment-сюиты зелёные; REG-010 (live-Mac enrichment) — LOCAL MAC QA (в облаке не тестируется)"
 }

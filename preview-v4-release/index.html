@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="description" content="Lumo 4.0 — AI Client Scout: реальный поиск организаций (DaData), CRM и проверка источников. Единый движок v3.5.3.">
+<title>Lumo 4.0 — AI Client Scout</title>
+<link rel="stylesheet" href="app/styles.css">
+<script>
+/* ================================================================
+   Lumo 4.0 — изоляция хранилища (ТЗ 05/06 §3.3, FINAL_TASK P0).
+   Устанавливается ДО загрузки движка: единственная правка движка
+   (LS_KEY) читает этот override. Рабочий ключ ai_client_scout_v1
+   данным приложением НЕ читается и НЕ пишется; перенос базы —
+   только явным экспортом/импортом пользователем (раздел «Данные»).
+   ================================================================ */
+window.LUMO_STORAGE_KEY_OVERRIDE = 'lumo4_stage3_v1';
+window.LUMO_PROD_KEY = 'ai_client_scout_v1';
+</script>
+</head>
+<body>
+<!-- Технический модуль: скрытый host-каркас движка v3.5.3.
+     НЕ пользовательская оболочка, НЕ iframe: движок работает в том же
+     документе, его UI-элементы скрыты и используются только как
+     служебные точки монтирования (модалки apply-enrichment и др.). -->
+<div id="engine-host" hidden aria-hidden="true">
+<div id="root" class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="view" id="view"></div>
+  </div>
+</div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts"></div>
+</div>
+
+<!-- Единый пользовательский интерфейс Lumo 4.0 (визуальный эталон — Stage 2) -->
+<div id="s3-app" class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">L</div>
+      <div><strong>LUMO</strong><small>Клиент-скаут · 4.0</small></div>
+    </div>
+    <div class="nav-caption">Рабочее пространство</div>
+    <nav class="nav" id="s3-nav" aria-label="Основная навигация"></nav>
+    <div class="side-bottom">
+      <div class="side-divider"></div>
+      <p class="side-note" id="s3-side-note">Данные — в отдельном тестовом ключе. Рабочая база v3.5.3 не читается и не изменяется.</p>
+    </div>
+  </aside>
+  <main class="content">
+    <header class="topbar">
+      <span class="mobile-head">LUMO</span>
+      <div class="crumb">Lumo 4.0 / <strong id="s3-crumb">Поиск</strong></div>
+      <div class="top-right svc-badges" id="s3-status"></div>
+    </header>
+    <div class="page" id="s3-main"></div>
+  </main>
+  <nav class="mobile-nav" id="s3-mnav" aria-label="Мобильное меню"></nav>
+</div>
+<div id="s3-toasts"></div>
+<div id="s3-modal-root"></div>
+
+<script src="engine/lumo_engine_v353.js"></script>
+<script src="app/adapter.js"></script>
+<script src="app/ui.js"></script>
+</body>
+</html>
